@@ -1,0 +1,54 @@
+{
+    "dataset_reader": {
+        "type": "transformer_squad",
+        "length_limit": 512,
+        "transformer_model_name": "roberta-large"
+    },
+    "model": {
+        "type": "transformer_qa",
+        "transformer_model_name": "roberta-large"
+    },
+    "train_data_path": "TODO",
+    "validation_data_path": "https://allennlp.s3.amazonaws.com/datasets/squad/squad-dev-v2.0.json",
+    "trainer": {
+	"cuda_device": 0,
+        "grad_clipping": 1,
+        "learning_rate_scheduler": {
+            "type": "slanted_triangular",
+            "cut_frac": 0.1,
+            "num_epochs": 5
+        },
+        "num_epochs": 5,
+        "optimizer": {
+            "type": "huggingface_adamw",
+            "eps": 1e-08,
+            "lr": 2e-05,
+            "parameter_groups": [
+                [
+                    [
+                        "bias",
+                        "LayerNorm\\.weight",
+                        "layer_norm\\.weight"
+                    ],
+                    {
+                        "weight_decay": 0
+                    }
+                ]
+            ],
+            "weight_decay": 0
+        },
+        "validation_metric": "+per_instance_f1"
+    },
+    "vocabulary": {
+        "type": "empty"
+    },
+    "data_loader": {
+        "batch_sampler": {
+            "type": "bucket",
+            "batch_size": 16
+        }
+    },
+    "numpy_seed": 100,
+    "pytorch_seed": 100,
+    "random_seed": 100
+}
