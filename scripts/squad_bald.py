@@ -37,19 +37,27 @@ def main():
             help="Location of output file",
             default="data/squad_dev_ttd_outputs.json"
     )
+    parser.add_argument(
+            "--no-bald",
+            action="store_true",
+            help="Will not activate test-time dropout and will run only one pass if this is set",
+            dest="no_bald"
+    )
     args = parser.parse_args()
     archive = load_archive(args.model)
     archive.model.cuda()
 
     predictor = TransformerQAPredictor(archive.model, archive.dataset_reader)
-    activate_dropouts(predictor._model)        
+    if not args.no_bald:
+        activate_dropouts(predictor._model)
 
+    num_passes = 1 if args.no_bald else args.passes 
     dataset = load_dataset('squad_v2', split='validation')
     output_data = []
 
     for datum in tqdm(dataset):
         answers = dataset[0]['answers']['text']
-        outputs = [predictor.predict(question=datum['question'], passage=datum['context']) for _ in range(args.passes)]
+        outputs = [predictor.predict(question=datum['question'], passage=datum['context']) for _ in range(num_passes)]
         predictions = [o['best_span_str'] for o in outputs]
         prediction_probabilities = [o['best_span_probs'] for o in outputs]
         output_data.append(
