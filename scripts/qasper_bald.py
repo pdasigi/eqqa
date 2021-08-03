@@ -66,7 +66,7 @@ def main():
     )
     args = parser.parse_args()
     archive = load_archive(args.model)
-    #archive.model.cuda()
+    archive.model.cuda()
 
     predictor = QasperPredictor(archive.model, archive.dataset_reader)
     if not args.no_bald:
