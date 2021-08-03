@@ -56,7 +56,6 @@ def main():
     output_data = []
 
     for datum in tqdm(dataset):
-        answers = dataset[0]['answers']['text']
         outputs = [predictor.predict(question=datum['question'], passage=datum['context']) for _ in range(num_passes)]
         predictions = [o['best_span_str'] for o in outputs]
         prediction_probabilities = [o['best_span_probs'] for o in outputs]
