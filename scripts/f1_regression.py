@@ -10,11 +10,41 @@ random.seed(23019)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", type=str, required=True)
-    parser.add_argument("--features", type=str, nargs="+", required=True)
-    parser.add_argument("--target", type=str, default="mean_f1")
-    parser.add_argument("--folds", type=int, default=10)
-    parser.add_argument("--alpha", type=float, default=0.1)
+    parser.add_argument(
+        "--data",
+        type=str,
+        required=True
+    )
+    parser.add_argument(
+        "--features",
+        type=str,
+        nargs="+",
+        required=True,
+        help="All the features to use in regression. These are the keys in the data."
+    )
+    parser.add_argument(
+        "--target",
+        type=str,
+        default="mean_f1",
+        help="Should we try to predict the mean F1 or the max F1 over references?"
+    )
+    parser.add_argument(
+        "--folds",
+        type=int,
+        default=10
+    )
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=0.1,
+        help="Regularization parameter for ridge regression"
+    )
+    parser.add_argument(
+        "--baseline_constant",
+        type=float,
+        default=0.5,
+        help="The constant value to predict as F1 for the constant baseline"
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -32,6 +62,8 @@ def main():
 
     train_errors = []
     test_errors = []
+    baseline_test_errors = {feature: [] for feature in args.features}
+    baseline_test_errors['constant'] = []
     for i in range(args.folds):
         test_data = folds[i]
         train_data = []
@@ -72,12 +104,22 @@ def main():
         test_predictions = regression_model.predict(test_x)
         test_error = mean_absolute_error(test_y, test_predictions)
 
+        # Measuring errors by directly using the features as predictions
+        for i, feature in enumerate(args.features):
+            baseline_test_errors[feature].append(mean_absolute_error(test_y, [x[i] for x in test_x]))
+
+        baseline_test_errors['constant'].append(mean_absolute_error(test_y, [args.baseline_constant] * len(test_y)))
+
         if args.verbose:
             print(f"Test error: {test_error}")
+            print(f"Baseline test errors: {[baseline_test_errors[feature][-1] for feature in args.features]}")
         test_errors.append(test_error)
 
     print(f"Average train error: {np.mean(train_errors)} (+/- {np.std(train_errors)})")
     print(f"Average test error: {np.mean(test_errors)} (+/- {np.std(test_errors)})")
+    print("Average baseline test errors:")
+    for key in baseline_test_errors:
+        print(f"{key}: {np.mean(baseline_test_errors[key])}")
 
 if __name__ == "__main__":
     main()

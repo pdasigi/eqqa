@@ -10,6 +10,8 @@ def main():
     metric = SquadEmAndF1()
     f1_hash = {}
     def get_f1(pred, ans):
+        pred = pred.strip()
+        ans = ans.strip()
         if (pred, ans) in f1_hash:
             return f1_hash[(pred, ans)]
         if (ans, pred) in f1_hash:
@@ -38,9 +40,13 @@ def main():
     pairwise_ttd_f1s = []
     pairwise_ttd_f1_std = []
     against_max_ttd_f1s = []
-    pred_probability = []
-    ttd_pred_probability_mean = []
-    ttd_pred_probability_std = []
+
+    have_probabilities = "probabilities" in predictions[0]
+
+    if have_probabilities:
+        pred_probability = []
+        ttd_pred_probability_mean = []
+        ttd_pred_probability_std = []
 
     for prediction, prediction_ttd in tqdm(zip(predictions, predictions_ttd)):
         assert prediction["qid"] == prediction_ttd["qid"]
@@ -50,14 +56,13 @@ def main():
             if args.ignore_no_answers:
                 continue
             answers = [""]
-        pred_probability.append(prediction["probabilities"][0])
+
         pred_f1s = [get_f1(pred, answer) for answer in answers]
         max_f1 = max(pred_f1s)
         max_f1s.append(max_f1)
         mean_f1 = np.mean(pred_f1s)
         mean_f1s.append(mean_f1)
         ttd_preds = prediction_ttd["predictions"][:num_samples]
-        ttd_probs = prediction_ttd["probabilities"][:num_samples]
         ttd_pred_f1s = []
         against_max_ttd_pred_f1s = []
         for i in range(len(ttd_preds)):
@@ -75,19 +80,25 @@ def main():
         pairwise_ttd_f1s.append(ttd_f1_mean)
         pairwise_ttd_f1_std.append(ttd_f1_std)
         against_max_ttd_f1s.append(np.mean(against_max_ttd_pred_f1s))
-        ttd_pred_prob_mean = np.mean(ttd_probs)
-        ttd_pred_prob_std = np.std(ttd_probs)
-        ttd_pred_probability_mean.append(ttd_pred_prob_mean)
-        ttd_pred_probability_std.append(ttd_pred_prob_std)
+
+        if have_probabilities:
+            pred_probability.append(prediction["probabilities"][0])
+            ttd_probs = prediction_ttd["probabilities"][:num_samples]
+            ttd_pred_prob_mean = np.mean(ttd_probs)
+            ttd_pred_prob_std = np.std(ttd_probs)
+            ttd_pred_probability_mean.append(ttd_pred_prob_mean)
+            ttd_pred_probability_std.append(ttd_pred_prob_std)
         if output_file is not None:
-            print(json.dumps({"id": prediction["qid"],
-                              "pred_mean_f1": mean_f1,
-                              "pred_max_f1": max_f1,
-                              "ttd_pairwise_f1_mean": ttd_f1_mean,
-                              "ttd_pairwise_f1_std": ttd_f1_std,
-                              "pred_probability": prediction["probabilities"][0],
-                              "ttd_prob_mean": ttd_pred_prob_mean,
-                              "ttd_prob_std": ttd_pred_prob_std}), file=output_file)
+            data_to_dump = {"id": prediction["qid"],
+                            "pred_mean_f1": mean_f1,
+                            "pred_max_f1": max_f1,
+                            "ttd_pairwise_f1_mean": ttd_f1_mean,
+                            "ttd_pairwise_f1_std": ttd_f1_std}
+            if have_probabilities:
+                data_to_dump.update({"pred_probability": prediction["probabilities"][0],
+                                     "ttd_prob_mean": ttd_pred_prob_mean,
+                                     "ttd_prob_std": ttd_pred_prob_std})
+            print(json.dumps(data_to_dump), file=output_file)
 
     assert len(max_f1s) == len(mean_f1s) == len(pairwise_ttd_f1s)
     max_f1_pairwise_correl = stats.pearsonr(max_f1s, pairwise_ttd_f1s)
@@ -98,16 +109,18 @@ def main():
     print("Correlation of Pairwise TTD F1s with Mean-F1 against references:", mean_f1_pairwise_correl)
     mean_f1_pairwise_std_correl = stats.pearsonr(mean_f1s, pairwise_ttd_f1_std)
     print("Correlation of STD of Pairwise TTD F1s with Mean-F1 against references:", mean_f1_pairwise_std_correl)
-    mean_prob_correl = stats.pearsonr(mean_f1s, ttd_pred_probability_mean)
-    print("Correlation of TTD probability mean with Mean-F1 against references:", mean_prob_correl)
-    mean_prob_max_f1_correl = stats.pearsonr(max_f1s, ttd_pred_probability_mean)
-    print("Correlation of TTD probability mean with Max-F1 against references:", mean_prob_max_f1_correl)
-    std_prob_correl = stats.pearsonr(mean_f1s, ttd_pred_probability_std)
-    print("Correlation of TTD probability STD with Mean-F1 against references:", std_prob_correl)
-    prob_max_f1_correl = stats.pearsonr(max_f1s, pred_probability)
-    print("Correlation of prediction probability with Max-F1 against references:", prob_max_f1_correl)
-    prob_mean_f1_correl = stats.pearsonr(mean_f1s, pred_probability)
-    print("Correlation of prediction probability with Mean-F1 against references:", prob_mean_f1_correl)
+
+    if have_probabilities:
+        mean_prob_correl = stats.pearsonr(mean_f1s, ttd_pred_probability_mean)
+        print("Correlation of TTD probability mean with Mean-F1 against references:", mean_prob_correl)
+        mean_prob_max_f1_correl = stats.pearsonr(max_f1s, ttd_pred_probability_mean)
+        print("Correlation of TTD probability mean with Max-F1 against references:", mean_prob_max_f1_correl)
+        std_prob_correl = stats.pearsonr(mean_f1s, ttd_pred_probability_std)
+        print("Correlation of TTD probability STD with Mean-F1 against references:", std_prob_correl)
+        prob_max_f1_correl = stats.pearsonr(max_f1s, pred_probability)
+        print("Correlation of prediction probability with Max-F1 against references:", prob_max_f1_correl)
+        prob_mean_f1_correl = stats.pearsonr(mean_f1s, pred_probability)
+        print("Correlation of prediction probability with Mean-F1 against references:", prob_mean_f1_correl)
 
 
 if __name__ == "__main__":
