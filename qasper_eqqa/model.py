@@ -41,7 +41,6 @@ class QasperQualityEstimator(Model):
         self.pooler = torch.nn.Linear(max_document_length, 1)
         self._metric = MeanAbsoluteError()
         self._loss_function = MSELoss()
-        print([x[0] for x in self.named_parameters() if x[1].requires_grad])
 
     def forward(
         self,
@@ -62,10 +61,9 @@ class QasperQualityEstimator(Model):
             output_hidden_states=True
         )
         encoded_tokens = output["encoder_last_hidden_state"]
+        answer_logits = output["logits"]
         prepooled_output = self.regression_feedforward(encoded_tokens)
         prediction = torch.sigmoid(self.pooler(prepooled_output.squeeze(-1)))
-        print("PREDICTION:", prediction)
-        print("TARGET:", target_f1)
         loss = self._loss_function(prediction, target_f1)
         self._metric(prediction, target_f1)
         return {"loss": loss, "predicted_f1": prediction}
