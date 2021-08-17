@@ -20,7 +20,10 @@ class QasperQualityEstimator(Model):
         vocab: Vocabulary,
         trained_qasper_model: str,
         max_document_length: int=15360,
-        regression_feedforward: FeedForward = None,
+        max_decoder_output_length: int=100,
+        encoder_output_projector: FeedForward = None,
+        decoder_output_projector: FeedForward = None,
+        regression_layer: FeedForward = None,
         **kwargs
     ):
         super().__init__(vocab, **kwargs)
@@ -34,11 +37,26 @@ class QasperQualityEstimator(Model):
         self.transformer = AutoModelForSeq2SeqLM.from_pretrained(pretrained_model_path)
         for _, param in self.transformer.named_parameters():
             param.requires_grad = False
-        if regression_feedforward:
-            self.regression_feedforward = regression_feedforward
+        if encoder_output_projector:
+            self.encoder_output_projector = encoder_output_projector
         else:
-            self.regression_feedforward = torch.nn.Linear(self.transformer.config.hidden_size, 1)
-        self.pooler = torch.nn.Linear(max_document_length, 1)
+            self.encoder_output_projector = torch.nn.Linear(
+                self.transformer.config.hidden_size, 1
+            )
+
+        if decoder_output_projector:
+            self.decoder_output_projector = decoder_output_projector
+        else:
+            self.decoder_output_projector = torch.nn.Linear(
+                self.transformer.config.hidden_size, 1
+            )
+
+        if regression_layer:
+            self.regression_layer = regression_layer
+        else:
+            self.regression_layer = torch.nn.Linear(
+                max_document_length + max_decoder_output_length, 1
+            )
         self._metric = MeanAbsoluteError()
         self._loss_function = MSELoss()
 
@@ -61,9 +79,15 @@ class QasperQualityEstimator(Model):
             output_hidden_states=True
         )
         encoded_tokens = output["encoder_last_hidden_state"]
-        answer_logits = output["logits"]
-        prepooled_output = self.regression_feedforward(encoded_tokens)
-        prediction = torch.sigmoid(self.pooler(prepooled_output.squeeze(-1)))
+        decoded_tokens = output["last_hidden_state"]
+        # (batch_size, max_document_length)
+        projected_encoder_output = self.encoder_output_projector(encoded_tokens).squeeze(-1)
+        # (batch_size, max_decoder_output_length)
+        projected_decoder_output = self.decoder_output_projector(decoded_tokens).squeeze(-1)
+        regression_input = torch.cat(
+            [projected_encoder_output, projected_decoder_output], -1
+        )
+        prediction = torch.sigmoid(self.regression_layer(regression_input))
         loss = self._loss_function(prediction, target_f1)
         self._metric(prediction, target_f1)
         return {"loss": loss, "predicted_f1": prediction}
