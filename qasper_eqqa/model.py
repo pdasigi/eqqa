@@ -57,6 +57,8 @@ class QasperQualityEstimator(Model):
             self.regression_layer = torch.nn.Linear(
                 max_document_length + max_decoder_output_length, 1
             )
+
+        self._max_decoder_output_length = max_decoder_output_length
         self._metric = MeanAbsoluteError()
         self._loss_function = MSELoss()
 
@@ -73,7 +75,7 @@ class QasperQualityEstimator(Model):
             input_ids=input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
-            decoder_input_ids=torch.tensor([[0, 1, 2]]),
+            decoder_input_ids=input_ids.new(torch.tensor([[0] * self._max_decoder_output_length])),
             use_cache=False,
             return_dict=True,
             output_hidden_states=True
