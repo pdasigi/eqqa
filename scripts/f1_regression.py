@@ -16,11 +16,10 @@ def main():
         required=True
     )
     parser.add_argument(
-        "--features",
+        "--ignore_features",
         type=str,
         nargs="+",
-        required=True,
-        help="All the features to use in regression. These are the keys in the data."
+        help="All the features other than potential targets to ignore in regression. These are the keys in the data."
     )
     parser.add_argument(
         "--target",
@@ -48,7 +47,18 @@ def main():
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
+
     all_data = [json.loads(line) for line in open(args.data)]
+    features = []
+    for key in all_data[0].keys():
+        ignore_features = ["id", "pred_mean_f1", "pred_max_f1"]
+        if args.ignore_features:
+            ignore_features += args.ignore_features
+        if key in ignore_features:
+            continue
+        features.append(key)
+
+    print(f"Using features: {features}")
     random.shuffle(all_data)
     folds = []
     fold_size = len(all_data) // args.folds
@@ -62,7 +72,7 @@ def main():
 
     train_errors = []
     test_errors = []
-    baseline_test_errors = {feature: [] for feature in args.features}
+    baseline_test_errors = {feature: [] for feature in features}
     baseline_test_errors['constant'] = []
     for i in range(args.folds):
         test_data = folds[i]
@@ -76,14 +86,14 @@ def main():
         train_y = []
 
         for datum in train_data:
-            train_x.append([datum[feature] for feature in args.features])
+            train_x.append([datum[feature] for feature in features])
             train_y.append(datum["pred_mean_f1"] if args.target == "mean_f1" else datum["pred_max_f1"])
 
         test_x = []
         test_y = []
 
         for datum in test_data:
-            test_x.append([datum[feature] for feature in args.features])
+            test_x.append([datum[feature] for feature in features])
             test_y.append(datum["pred_mean_f1"] if args.target == "mean_f1" else datum["pred_max_f1"])
 
         if args.verbose:
@@ -96,7 +106,7 @@ def main():
         train_error = mean_absolute_error(train_y, train_predictions)
 
         if args.verbose:
-            print("Coefficients:", list(zip(args.features, regression_model.coef_)))
+            print("Coefficients:", list(zip(features, regression_model.coef_)))
             print(f"Train error: {train_error}")
 
         train_errors.append(train_error)
@@ -105,14 +115,14 @@ def main():
         test_error = mean_absolute_error(test_y, test_predictions)
 
         # Measuring errors by directly using the features as predictions
-        for i, feature in enumerate(args.features):
+        for i, feature in enumerate(features):
             baseline_test_errors[feature].append(mean_absolute_error(test_y, [x[i] for x in test_x]))
 
         baseline_test_errors['constant'].append(mean_absolute_error(test_y, [args.baseline_constant] * len(test_y)))
 
         if args.verbose:
             print(f"Test error: {test_error}")
-            print(f"Baseline test errors: {[baseline_test_errors[feature][-1] for feature in args.features]}")
+            print(f"Baseline test errors: {[baseline_test_errors[feature][-1] for feature in features]}")
         test_errors.append(test_error)
 
     print(f"Average train error: {np.mean(train_errors)} (+/- {np.std(train_errors)})")

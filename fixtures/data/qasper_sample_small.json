@@ -1,0 +1,68 @@
+{
+  "1909.00694": {
+    "title": "Minimally Supervised Learning of Affective Events Using Discourse Relations",
+    "abstract": "This is the abstract of the paper",
+    "full_text": [
+      {
+        "section_name": "Introduction",
+        "paragraphs": [
+          "A short paragraph",
+          "Another intro paragraph"
+        ]
+      },
+      {
+        "section_name": "Related Work",
+        "paragraphs": [
+          "Shorter paragraph",
+          ""
+        ]
+      },
+      {
+        "section_name": "Proposed Method",
+        "paragraphs": [
+          ""
+        ]
+      },
+      {
+        "section_name": "Proposed Method ::: Polarity Function",
+        "paragraphs": [
+          "",
+          "Method paragraph using seed lexicon",
+          ""
+        ]
+      },
+      {
+        "section_name": "Conclusion",
+        "paragraphs": [
+          "Conclusion paragraph"
+        ]
+      }
+    ],
+    "qas": [
+      {
+        "question": "What is the seed lexicon?",
+        "question_id": "753990d0b621d390ed58f20c4d9e4f065f0dc672",
+	"mean_f1": 0.2,
+	"max_f1": 0.8
+      },
+      {
+        "question": "Are there three?",
+        "question_id": "753990d0b621d390ed58f20c4d9e4f065f0dc672",
+	"mean_f1": 0.6,
+	"max_f1": 0.9
+      },
+      {
+        "question": "Are there four?",
+        "question_id": "753990d0b621d390ed58f20c4d9e4f065f0dc672",
+	"mean_f1": 0.0,
+	"max_f1": 0.0
+      },
+      {
+        "question": "Is this extractive?",
+        "question_id": "753990d0b621d390ed58f20c4d9e4f065f0dc672",
+	"mean_f1": 0.1,
+	"max_f1": 0.3
+      }
+    ]
+  }
+}
