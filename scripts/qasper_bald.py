@@ -53,6 +53,12 @@ def main():
             default=20
     )
     parser.add_argument(
+            "--dataset",
+            type=str,
+            help="Which dataset to use, train or dev (default)",
+            default="dev"
+    )
+    parser.add_argument(
             "--output",
             type=str,
             help="Location of output file",
@@ -74,7 +80,7 @@ def main():
         predictor._model.transformer.train()
 
     num_passes = 1 if args.no_bald else args.passes 
-    dataset = load_dataset('qasper', split='validation')
+    dataset = load_dataset('qasper', split='validation' if args.dataset == "dev" else "train")
     output_data = []
 
     for datum in tqdm(dataset):
