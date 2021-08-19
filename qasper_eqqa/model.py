@@ -75,13 +75,13 @@ class QasperQualityEstimator(Model):
             input_ids=input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
-            decoder_input_ids=input_ids.new(torch.tensor([[0] * self._max_decoder_output_length])),
+            decoder_input_ids=torch.tensor([[0] * self._max_decoder_output_length]).to(input_ids.device),
             use_cache=False,
             return_dict=True,
             output_hidden_states=True
         )
         encoded_tokens = output["encoder_last_hidden_state"]
-        decoded_tokens = output["last_hidden_state"]
+        decoded_tokens = output["decoder_hidden_states"][-1]
         # (batch_size, max_document_length)
         projected_encoder_output = self.encoder_output_projector(encoded_tokens).squeeze(-1)
         # (batch_size, max_decoder_output_length)
