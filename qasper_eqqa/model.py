@@ -7,7 +7,7 @@ from allennlp.data import TextFieldTensors, Vocabulary
 from allennlp.models.model import Model
 from allennlp.modules import FeedForward
 from allennlp.nn import util
-from allennlp.training.metrics import MeanAbsoluteError
+from allennlp.training.metrics import MeanAbsoluteError, Average
 import torch
 from torch.nn import MSELoss
 from transformers import AutoModelForSeq2SeqLM
@@ -59,7 +59,9 @@ class QasperQualityEstimator(Model):
             )
 
         self._max_decoder_output_length = max_decoder_output_length
-        self._metric = MeanAbsoluteError()
+        self._mae_metric = MeanAbsoluteError()
+        # Check whether the predicted F1 is in the correct third.
+        self._bucket_accuracy = Average()
         self._loss_function = MSELoss()
 
     def forward(
@@ -91,9 +93,28 @@ class QasperQualityEstimator(Model):
         )
         prediction = torch.sigmoid(self.regression_layer(regression_input))
         loss = self._loss_function(prediction, target_f1)
-        self._metric(prediction, target_f1)
+        self._mae_metric(prediction, target_f1)
+        self._bucket_accuracy(self._get_bucket_accuracy(prediction, target_f1))
         return {"loss": loss, "predicted_f1": prediction}
 
     @overrides
     def get_metrics(self, reset: bool=False) -> Dict[str, float]:
-        return self._metric.get_metric(reset)
+        metrics = self._mae_metric.get_metric(reset)
+        metrics["bucket_accuracy"] = self._bucket_accuracy.get_metric(reset)
+        return metrics
+
+    @staticmethod
+    def _get_bucket_accuracy(prediction: torch.Tensor, target_f1: torch.Tensor) -> float:
+        bucket_accuracies = []
+        for instance_prediction, instance_target in zip(prediction.tolist(),
+                                                        target_f1.tolist()):
+            prediction_bucket = None
+            target_bucket = None
+            for i, limit in enumerate([1/3, 2/3, 1.0]):
+                if instance_prediction <= limit and prediction_bucket is None:
+                    prediction_bucket = i
+                if instance_target <= limit and target_bucket is None:
+                    target_bucket = i
+
+            bucket_accuracies.append(prediction_bucket == target_bucket)
+        return sum(bucket_accuracies) / len(bucket_accuracies)
