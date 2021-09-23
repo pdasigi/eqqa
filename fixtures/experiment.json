@@ -15,13 +15,7 @@ local number_of_train_instances = 6;
     "validation_data_path": "fixtures/data/qasper_sample_small.json",
     "model": {
         "type": "qasper_eqqa",
-	"trained_qasper_model": "https://pradeepd-qasper.s3.us-west-2.amazonaws.com/qasper_trained_models/qasper_trained_led_base_hf_serialized.tgz",
-	"regression_feedforward": {
-		"input_dim": 768,
-	        "num_layers": 2,
-		"hidden_dims": [768, 1],
-		"activations": "tanh"
-	}
+	"trained_qasper_model": "https://pradeepd-qasper.s3.us-west-2.amazonaws.com/qasper_trained_models/qasper_trained_led_base_hf_serialized.tgz"
     },
     "data_loader": {
         "batch_size": batch_size

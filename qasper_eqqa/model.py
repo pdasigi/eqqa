@@ -9,7 +9,7 @@ from allennlp.modules import FeedForward
 from allennlp.nn import util
 from allennlp.training.metrics import MeanAbsoluteError, Average
 import torch
-from torch.nn import MSELoss
+from torch.nn import MSELoss, CrossEntropyLoss
 from transformers import AutoModelForSeq2SeqLM
 
 
@@ -24,6 +24,7 @@ class QasperQualityEstimator(Model):
         encoder_output_projector: FeedForward = None,
         decoder_output_projector: FeedForward = None,
         regression_layer: FeedForward = None,
+        f1_range_classifier: FeedForward = None,
         **kwargs
     ):
         super().__init__(vocab, **kwargs)
@@ -51,6 +52,15 @@ class QasperQualityEstimator(Model):
                 self.transformer.config.hidden_size, 1
             )
 
+        # Classifier predicts whether the F1 score is 0.0, 1.0, or other.
+        if f1_range_classifier:
+            self.f1_range_classifier = f1_range_classifier
+        else:
+            self.f1_range_classifier = torch.nn.Linear(
+                max_document_length + max_decoder_output_length, 3
+            )
+
+        # Regression layer for predicting the F1 score that is "other".
         if regression_layer:
             self.regression_layer = regression_layer
         else:
@@ -62,7 +72,8 @@ class QasperQualityEstimator(Model):
         self._mae_metric = MeanAbsoluteError()
         # Check whether the predicted F1 is in the correct third.
         self._bucket_accuracy = Average()
-        self._loss_function = MSELoss()
+        self._regression_loss_function = MSELoss()
+        self._classifier_loss_function = CrossEntropyLoss()
 
     def forward(
         self,
@@ -88,14 +99,46 @@ class QasperQualityEstimator(Model):
         projected_encoder_output = self.encoder_output_projector(encoded_tokens).squeeze(-1)
         # (batch_size, max_decoder_output_length)
         projected_decoder_output = self.decoder_output_projector(decoded_tokens).squeeze(-1)
+        # (batch_size, max_document_length + max_decoder_output_length)
         regression_input = torch.cat(
             [projected_encoder_output, projected_decoder_output], -1
         )
-        prediction = torch.sigmoid(self.regression_layer(regression_input))
-        loss = self._loss_function(prediction, target_f1)
+        # (batch_size, 3)
+        f1_range_prediction = self.f1_range_classifier(regression_input)
+        target_f1_range = self._make_f1_range_target(target_f1)
+        classifier_loss = self._classifier_loss_function(f1_range_prediction, target_f1_range)
+        # (batch_size, 1)
+        other_prediction = torch.sigmoid(self.regression_layer(regression_input))
+        # We should compute the regression loss only if the target f1 is neither 0.0 or 1.0.
+        between_targets = (target_f1_range == 1.0) * target_f1
+        between_predictions = (target_f1_range == 1.0) * other_prediction
+        regression_loss = self._regression_loss_function(between_predictions, between_targets)
+        loss = regression_loss + classifier_loss
+
+        # Making the final prediction by combining the range and between predictions
+        predicted_range = torch.argmax(f1_range_prediction, 1)
+        # When the predicted range is neither class-1 or class-2, the prediction is 0.0
+        prediction = ((predicted_range == 1.0) * between_predictions) + ((predicted_range == 2.0) * 1.0)
+
         self._mae_metric(prediction, target_f1)
         self._bucket_accuracy(self._get_bucket_accuracy(prediction, target_f1))
-        return {"loss": loss, "predicted_f1": prediction, "target_f1": target_f1}
+        return {
+            "loss": loss,
+            "predicted_f1": prediction,
+            "predicted_range": predicted_range,
+            "target_f1": target_f1
+        }
+
+    @staticmethod
+    def _make_f1_range_target(target_f1: torch.Tensor) -> torch.Tensor:
+        """
+        Takes a tensor of F1 scores and makes a 3-class tensor indicating whether the f1 score is 0, between 0 and
+        1, or is 1.
+        """
+        score_is_zero = target_f1 == 0.0
+        score_is_one = target_score == 1.0
+        score_is_between = (target_f1 > 0.0) * (target_f1 < 1.0)
+        return ((score_is_zero * 1) + (score_is_between * 2) + (score_is_one * 3)) - 1
 
     @overrides
     def get_metrics(self, reset: bool=False) -> Dict[str, float]:
