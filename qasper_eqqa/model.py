@@ -95,7 +95,7 @@ class QasperQualityEstimator(Model):
         loss = self._loss_function(prediction, target_f1)
         self._mae_metric(prediction, target_f1)
         self._bucket_accuracy(self._get_bucket_accuracy(prediction, target_f1))
-        return {"loss": loss, "predicted_f1": prediction}
+        return {"loss": loss, "predicted_f1": prediction, "target_f1": target_f1}
 
     @overrides
     def get_metrics(self, reset: bool=False) -> Dict[str, float]:
@@ -110,10 +110,10 @@ class QasperQualityEstimator(Model):
                                                         target_f1.tolist()):
             prediction_bucket = None
             target_bucket = None
-            for i, limit in enumerate([1/3, 2/3, 1.0]):
-                if instance_prediction <= limit and prediction_bucket is None:
+            for i, limit in enumerate([0.0, 0.134, 1.0]):
+                if instance_prediction[0] <= limit and prediction_bucket is None:
                     prediction_bucket = i
-                if instance_target <= limit and target_bucket is None:
+                if instance_target[0] <= limit and target_bucket is None:
                     target_bucket = i
 
             bucket_accuracies.append(prediction_bucket == target_bucket)

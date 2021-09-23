@@ -8,6 +8,21 @@ from sklearn.metrics import mean_absolute_error
 
 random.seed(23019)
 
+
+def bucket_accuracy(targets, predictions):
+    accuracy = []
+    for prediction, target in zip(predictions, targets):
+        prediction_bucket = None
+        target_bucket = None
+        for i, limit in enumerate([0.0, 0.134, 1.0]):
+            if prediction <= limit and prediction_bucket is None:
+                prediction_bucket = i
+            if target <= limit and target_bucket is None:
+                target_bucket = i
+        accuracy.append(prediction_bucket == target_bucket)
+    return sum(accuracy) / len(accuracy)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -44,9 +59,21 @@ def main():
         default=0.5,
         help="The constant value to predict as F1 for the constant baseline"
     )
+    parser.add_argument(
+        "--use_bucket_accuracy",
+        action="store_true",
+        help="Use bucket accuracy instead of MAE as the metric"
+    )
+    parser.add_argument(
+        "--test_predictions_output",
+        type=str,
+        help="Output file for test predictions"
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
+    test_predictions_file = open(args.test_predictions_output, "w") if args.test_predictions_output else None
 
+    metric = bucket_accuracy if args.use_bucket_accuracy else mean_absolute_error
 
     all_data = [json.loads(line) for line in open(args.data)]
     features = []
@@ -103,7 +130,7 @@ def main():
         regression_model.fit(train_x, train_y)
 
         train_predictions = regression_model.predict(train_x)
-        train_error = mean_absolute_error(train_y, train_predictions)
+        train_error = metric(train_y, train_predictions)
 
         if args.verbose:
             print("Coefficients:", list(zip(features, regression_model.coef_)))
@@ -112,13 +139,17 @@ def main():
         train_errors.append(train_error)
 
         test_predictions = regression_model.predict(test_x)
-        test_error = mean_absolute_error(test_y, test_predictions)
+        test_error = metric(test_y, test_predictions)
 
         # Measuring errors by directly using the features as predictions
         for i, feature in enumerate(features):
-            baseline_test_errors[feature].append(mean_absolute_error(test_y, [x[i] for x in test_x]))
+            if feature == "ttd_pairwise_f1_mean":
+                if test_predictions_file:
+                    for target, prediction in zip(test_y, [x[i] for x in test_x]):
+                        print(json.dumps({"prediction": prediction, "target": target}), file=test_predictions_file)
+            baseline_test_errors[feature].append(metric(test_y, [x[i] for x in test_x]))
 
-        baseline_test_errors['constant'].append(mean_absolute_error(test_y, [args.baseline_constant] * len(test_y)))
+        baseline_test_errors['constant'].append(metric(test_y, [args.baseline_constant] * len(test_y)))
 
         if args.verbose:
             print(f"Test error: {test_error}")
