@@ -136,7 +136,7 @@ class QasperQualityEstimator(Model):
         1, or is 1.
         """
         score_is_zero = target_f1 == 0.0
-        score_is_one = target_score == 1.0
+        score_is_one = target_f1 == 1.0
         score_is_between = (target_f1 > 0.0) * (target_f1 < 1.0)
         return ((score_is_zero * 1) + (score_is_between * 2) + (score_is_one * 3)) - 1
 
