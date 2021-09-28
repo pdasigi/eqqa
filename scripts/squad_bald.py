@@ -43,6 +43,11 @@ def main():
             help="Will not activate test-time dropout and will run only one pass if this is set",
             dest="no_bald"
     )
+    parser.add_argument(
+            "--devset",
+            help="Provide a development dataset if you want to use it instead of SQuAD dev",
+            type=str
+    )
     args = parser.parse_args()
     archive = load_archive(args.model)
     archive.model.cuda()
@@ -52,7 +57,10 @@ def main():
         activate_dropouts(predictor._model)
 
     num_passes = 1 if args.no_bald else args.passes 
-    dataset = load_dataset('squad_v2', split='validation')
+    if args.devset:
+        dataset = json.load(open(args.devset))
+    else:
+        dataset = load_dataset('squad_v2', split='validation')
     output_data = []
 
     for datum in tqdm(dataset):
@@ -62,7 +70,7 @@ def main():
         output_data.append(
                 {
                     'qid': datum['id'],
-                    'answers': datum['answers']['text'],
+                    'answers': datum['answers'] if isinstance(datum['answers'], list) else datum['answers']['text'],
                     'predictions': predictions,
                     'probabilities': prediction_probabilities,
                 }
