@@ -72,6 +72,7 @@ class QasperQualityEstimator(Model):
         self._mae_metric = MeanAbsoluteError()
         # Check whether the predicted F1 is in the correct third.
         self._bucket_accuracy = Average()
+        self._range_accuracy = Average()
         self._regression_loss_function = MSELoss()
         self._classifier_loss_function = CrossEntropyLoss()
 
@@ -117,6 +118,8 @@ class QasperQualityEstimator(Model):
 
         # Making the final prediction by combining the range and between predictions
         predicted_range = torch.argmax(f1_range_prediction, 1)
+        for instance_predicted_range, instance_target_range in zip(predicted_range.tolist(), target_f1_range.tolist()):
+            self._range_accuracy(instance_predicted_range == instance_target_range)
         # When the predicted range is neither class-1 or class-2, the prediction is 0.0
         prediction = ((predicted_range == 1.0) * between_predictions) + ((predicted_range == 2.0) * 1.0)
 
@@ -135,6 +138,7 @@ class QasperQualityEstimator(Model):
         Takes a tensor of F1 scores and makes a 3-class tensor indicating whether the f1 score is 0, between 0 and
         1, or is 1.
         """
+        target_f1 = target_f1.squeeze(1)
         score_is_zero = target_f1 == 0.0
         score_is_one = target_f1 == 1.0
         score_is_between = (target_f1 > 0.0) * (target_f1 < 1.0)
@@ -144,6 +148,7 @@ class QasperQualityEstimator(Model):
     def get_metrics(self, reset: bool=False) -> Dict[str, float]:
         metrics = self._mae_metric.get_metric(reset)
         metrics["bucket_accuracy"] = self._bucket_accuracy.get_metric(reset)
+        metrics["range_accuracy"] = self._range_accuracy.get_metric(reset)
         return metrics
 
     @staticmethod
