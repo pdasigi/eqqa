@@ -17,6 +17,12 @@ def main():
         for datum in data.values():
             for qa_info in datum["qas"]:
                 f1s.append(qa_info["max_f1"])
+
+    elif args.data.endswith(".json"):
+        data = json.load(open(args.data))
+        for datum in data:
+            f1s.append(datum["max_f1"])
+
     else:
         f1s = [json.loads(line)["pred_max_f1"] for line in open(args.data)]
 

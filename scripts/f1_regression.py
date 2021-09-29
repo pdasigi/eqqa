@@ -23,12 +23,102 @@ def bucket_accuracy(targets, predictions):
     return sum(accuracy) / len(accuracy)
 
 
+def get_train_test_errors(train_data, test_data, metric, features, target, alpha, baseline_constant,
+                          test_predictions_file, verbose):
+    train_x = []
+    train_y = []
+
+    for datum in train_data:
+        train_x.append([datum[feature] for feature in features])
+        train_y.append(datum["pred_mean_f1"] if target == "mean_f1" else datum["pred_max_f1"])
+
+    test_x = []
+    test_y = []
+
+    for datum in test_data:
+        test_x.append([datum[feature] for feature in features])
+        test_y.append(datum["pred_mean_f1"] if target == "mean_f1" else datum["pred_max_f1"])
+
+    if verbose:
+        print(f"Training for fold {i} on {len(train_x)} data points")
+
+    regression_model = linear_model.Ridge(alpha=alpha)
+    regression_model.fit(train_x, train_y)
+
+    train_predictions = regression_model.predict(train_x)
+    train_error = metric(train_y, train_predictions)
+
+    if verbose:
+        print("Coefficients:", list(zip(features, regression_model.coef_)))
+        print(f"Train error: {train_error}")
+
+
+    test_predictions = regression_model.predict(test_x)
+    test_error = metric(test_y, test_predictions)
+
+    baseline_test_error = {}
+    # Measuring errors by directly using the features as predictions
+    for i, feature in enumerate(features):
+        if feature == "ttd_pairwise_f1_mean":
+            if test_predictions_file:
+                for target, prediction in zip(test_y, [x[i] for x in test_x]):
+                    print(json.dumps({"prediction": prediction, "target": target}), file=test_predictions_file)
+        baseline_test_error[feature] = metric(test_y, [x[i] for x in test_x])
+
+    baseline_test_error['constant'] = metric(test_y, [baseline_constant] * len(test_y))
+
+    if verbose:
+        print(f"Test error: {test_error}")
+        print(f"Baseline test errors: {[baseline_test_errors[feature][-1] for feature in features]}")
+
+    return train_error, test_error, baseline_test_error
+
+def run_cross_validation(data, num_folds, metric, features, target, alpha, baseline_constant,
+                         test_predictions_file, verbose):
+    random.shuffle(data)
+    folds = []
+    fold_size = len(data) // num_folds
+    start_index = 0
+    for i in range(num_folds):
+        if i == num_folds - 1:
+            folds.append(data[start_index:])
+        else:
+            folds.append(data[start_index:start_index + fold_size])
+            start_index += fold_size
+    train_errors = []
+    test_errors = []
+    baseline_test_errors = {feature: [] for feature in features}
+    baseline_test_errors['constant'] = []
+    for i in range(num_folds):
+        test_data = folds[i]
+        train_data = []
+        for j in range(num_folds):
+            if j == i:
+                continue
+            train_data.extend(folds[j])
+        train_error, test_error, baseline_test_error = get_train_test_errors(train_data, test_data, metric,
+                                                                             features, target, alpha,
+                                                                             baseline_constant,
+                                                                             test_predictions_file, verbose)
+        for feature, error in baseline_test_error.items():
+            baseline_test_errors[feature].append(error)
+        train_errors.append(train_error)
+        test_errors.append(test_error)
+
+    return train_errors, test_errors, baseline_test_errors
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--data",
         type=str,
         required=True
+    )
+    parser.add_argument(
+        "--test_data",
+        type=str,
+        help="If not given, will run CV on 'data'"
     )
     parser.add_argument(
         "--ignore_features",
@@ -75,9 +165,9 @@ def main():
 
     metric = bucket_accuracy if args.use_bucket_accuracy else mean_absolute_error
 
-    all_data = [json.loads(line) for line in open(args.data)]
+    data = [json.loads(line) for line in open(args.data)]
     features = []
-    for key in all_data[0].keys():
+    for key in data[0].keys():
         ignore_features = ["id", "pred_mean_f1", "pred_max_f1"]
         if args.ignore_features:
             ignore_features += args.ignore_features
@@ -86,81 +176,40 @@ def main():
         features.append(key)
 
     print(f"Using features: {features}")
-    random.shuffle(all_data)
-    folds = []
-    fold_size = len(all_data) // args.folds
-    start_index = 0
-    for i in range(args.folds):
-        if i == args.folds - 1:
-            folds.append(all_data[start_index:])
-        else:
-            folds.append(all_data[start_index:start_index + fold_size])
-            start_index += fold_size
 
-    train_errors = []
-    test_errors = []
-    baseline_test_errors = {feature: [] for feature in features}
-    baseline_test_errors['constant'] = []
-    for i in range(args.folds):
-        test_data = folds[i]
-        train_data = []
-        for j in range(args.folds):
-            if j == i:
-                continue
-            train_data.extend(folds[j])
+    if args.test_data:
+        print("Test data is provided.")
+        test_data = [json.loads(line) for line in open(args.test_data)]
+        train_error, test_error, baseline_test_error = get_train_test_errors(data,
+                                                                             test_data,
+                                                                             metric,
+                                                                             features,
+                                                                             args.target,
+                                                                             args.alpha,
+                                                                             args.baseline_constant,
+                                                                             test_predictions_file,
+                                                                             args.verbose)
+        print(f"Train error: {train_error}")
+        print(f"Test error: {test_error}")
+        for feature, error in baseline_test_error.items():
+            print(f"{feature}: {error}")
 
-        train_x = []
-        train_y = []
-
-        for datum in train_data:
-            train_x.append([datum[feature] for feature in features])
-            train_y.append(datum["pred_mean_f1"] if args.target == "mean_f1" else datum["pred_max_f1"])
-
-        test_x = []
-        test_y = []
-
-        for datum in test_data:
-            test_x.append([datum[feature] for feature in features])
-            test_y.append(datum["pred_mean_f1"] if args.target == "mean_f1" else datum["pred_max_f1"])
-
-        if args.verbose:
-            print(f"Training for fold {i} on {len(train_x)} data points")
-
-        regression_model = linear_model.Ridge(alpha=args.alpha)
-        regression_model.fit(train_x, train_y)
-
-        train_predictions = regression_model.predict(train_x)
-        train_error = metric(train_y, train_predictions)
-
-        if args.verbose:
-            print("Coefficients:", list(zip(features, regression_model.coef_)))
-            print(f"Train error: {train_error}")
-
-        train_errors.append(train_error)
-
-        test_predictions = regression_model.predict(test_x)
-        test_error = metric(test_y, test_predictions)
-
-        # Measuring errors by directly using the features as predictions
-        for i, feature in enumerate(features):
-            if feature == "ttd_pairwise_f1_mean":
-                if test_predictions_file:
-                    for target, prediction in zip(test_y, [x[i] for x in test_x]):
-                        print(json.dumps({"prediction": prediction, "target": target}), file=test_predictions_file)
-            baseline_test_errors[feature].append(metric(test_y, [x[i] for x in test_x]))
-
-        baseline_test_errors['constant'].append(metric(test_y, [args.baseline_constant] * len(test_y)))
-
-        if args.verbose:
-            print(f"Test error: {test_error}")
-            print(f"Baseline test errors: {[baseline_test_errors[feature][-1] for feature in features]}")
-        test_errors.append(test_error)
-
-    print(f"Average train error: {np.mean(train_errors)} (+/- {np.std(train_errors)})")
-    print(f"Average test error: {np.mean(test_errors)} (+/- {np.std(test_errors)})")
-    print("Average baseline test errors:")
-    for key in baseline_test_errors:
-        print(f"{key}: {np.mean(baseline_test_errors[key])}")
+    else:
+        print("Test data is not provided. Will run cross validation on training data.")
+        train_errors, test_errors, baseline_test_errors = run_cross_validation(data,
+                                                                               args.folds,
+                                                                               metric,
+                                                                               features,
+                                                                               args.target,
+                                                                               args.alpha,
+                                                                               args.baseline_constant,
+                                                                               test_predictions_file,
+                                                                               args.verbose)
+        print(f"Average train error: {np.mean(train_errors)} (+/- {np.std(train_errors)})")
+        print(f"Average test error: {np.mean(test_errors)} (+/- {np.std(test_errors)})")
+        print("Average baseline test errors:")
+        for key in baseline_test_errors:
+            print(f"{key}: {np.mean(baseline_test_errors[key])}")
 
 if __name__ == "__main__":
     main()
