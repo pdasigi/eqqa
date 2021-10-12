@@ -34,10 +34,12 @@ def get_train_test_errors(train_data, test_data, metric, features, target, alpha
 
     test_x = []
     test_y = []
+    test_ids = []
 
     for datum in test_data:
         test_x.append([datum[feature] for feature in features])
         test_y.append(datum["pred_mean_f1"] if target == "mean_f1" else datum["pred_max_f1"])
+        test_ids.append(datum["id"])
 
     if verbose:
         print(f"Training for fold {i} on {len(train_x)} data points")
@@ -61,8 +63,8 @@ def get_train_test_errors(train_data, test_data, metric, features, target, alpha
     for i, feature in enumerate(features):
         if feature == "ttd_pairwise_f1_mean":
             if test_predictions_file:
-                for target, prediction in zip(test_y, [x[i] for x in test_x]):
-                    print(json.dumps({"prediction": prediction, "target": target}), file=test_predictions_file)
+                for id_, target, prediction in zip(test_ids, test_y, [x[i] for x in test_x]):
+                    print(json.dumps({"id": id_, "prediction": prediction, "target": target}), file=test_predictions_file)
         baseline_test_error[feature] = metric(test_y, [x[i] for x in test_x])
 
     baseline_test_error['constant'] = metric(test_y, [baseline_constant] * len(test_y))

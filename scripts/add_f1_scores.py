@@ -24,7 +24,10 @@ data = json.load(open(sys.argv[1]))
 for datum in data:
     prediction = datum["predictions"][0]
     references = datum["answers"]
-    f1s = [get_f1(prediction, reference) for reference in references]
+    if not references:
+        f1s = [1.0 if prediction == "" else 0.0]
+    else:
+        f1s = [get_f1(prediction, reference) for reference in references]
     mean_f1 = np.mean(f1s)
     max_f1 = max(f1s)
     mean_f1s.append(mean_f1)
