@@ -1,6 +1,6 @@
 from allennlp.common.testing import ModelTestCase
-import qasper_eqqa.model
-import qasper_eqqa.dataset_reader
+import quality_estimation.qasper_eqqa_model
+import quality_estimation.qasper_eqqa_reader
 
 class TestQasperEqqaModel(ModelTestCase):
     def setup_method(self):

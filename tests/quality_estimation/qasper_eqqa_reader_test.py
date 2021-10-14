@@ -3,7 +3,7 @@ from allennlp.common.util import ensure_list
 from allennlp.data import Vocabulary
 import numpy
 
-from qasper_eqqa.dataset_reader import QasperEqqaReader
+from quality_estimation.qasper_eqqa_reader import QasperEqqaReader
 
 
 class TestQasperReader:
@@ -15,6 +15,7 @@ class TestQasperReader:
         instance = instances[1]
         assert set(instance.fields.keys()) == {
             "question_with_context",
+            "attention_mask",
             "global_attention_mask",
             "target_f1",
         }
