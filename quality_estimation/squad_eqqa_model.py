@@ -1,14 +1,17 @@
 from typing import Dict, Any
+
 from overrides import overrides
+
+import torch
+from torch.nn import MSELoss
+
 from allennlp.common.file_utils import cached_path
 from allennlp.data import TextFieldTensors, Vocabulary
 from allennlp.models.model import Model
 from allennlp.models.archival import load_archive
 from allennlp.modules import FeedForward
-from allennlp.training.metrics import MeanAbsoluteError
+from allennlp.training.metrics import MeanAbsoluteError, Average
 from allennlp_models.rc import TransformerQA
-import torch
-from torch.nn import MSELoss, CrossEntropyLoss
 
 
 @Model.register("squad_eqqa")
@@ -47,6 +50,7 @@ class SquadEqqaModel(Model):
             )
 
         self._mae_metric = MeanAbsoluteError()
+        self._predicted_f1 = Average()
         self._regression_loss_function = MSELoss()
         self._padding_token_id = padding_token_id
 
@@ -69,12 +73,17 @@ class SquadEqqaModel(Model):
         loss = self._regression_loss_function(predicted_f1, target_f1)
 
         self._mae_metric(predicted_f1, target_f1)
+        for instance_predicted_f1 in predicted_f1:
+            self._predicted_f1(instance_predicted_f1)
         return {
             "loss": loss,
             "predicted_f1": predicted_f1,
-            "target_f1": target_f1
+            "target_f1": target_f1,
+            "id": [d["question_id"] for d in metadata]
         }
 
     @overrides
     def get_metrics(self, reset: bool=False) -> Dict[str, float]:
-        return self._mae_metric.get_metric(reset)
+        metrics = self._mae_metric.get_metric(reset)
+        metrics["predicted_f1"] = self._predicted_f1.get_metric(reset)
+        return metrics
