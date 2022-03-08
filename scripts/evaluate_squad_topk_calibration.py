@@ -36,23 +36,23 @@ def main():
             for j in range(len(f1s) - 1):
                 for k in range(j+1, len(f1s)):
                     if f1s[j] < f1s[k]:
-                        print(predictions[j], f1s[j], predictions[k], f1s[k])
                         datum_num_flips += 1
 
             num_flips.append(datum_num_flips)
             top_f1s.append(f1s[0])
             oracle_f1 = max(f1s)
             oracle_f1s.append(oracle_f1)
-            for i, f1 in enumerate(f1s):
+            for rank, f1 in enumerate(f1s):
                 if oracle_f1 == f1:
                     break
-            oracle_f1_ranks.append(i + 1)
+            oracle_f1_ranks.append(rank + 1)
 
     mean = lambda x: sum(x) / len(x)
     print(f"Top F1: {mean(top_f1s)}")
     print(f"Oracle F1: {mean(oracle_f1s)}")
     print(f"Oracle F1 rank: {mean(oracle_f1_ranks)}")
-    print(f"Num F1 flips: {mean(num_flips)}")
+    print(f"Num F1 flips: {mean(num_flips)}, ({min(num_flips)}, {max(num_flips)})")
+    print(f"Percentage of instances with no flips: {sum([n == 0 for n in num_flips]) / len(num_flips)}")
 
 if __name__ == "__main__":
     main()

@@ -13,7 +13,7 @@ from torch.nn import MSELoss, CrossEntropyLoss
 from transformers import AutoModelForSeq2SeqLM
 
 
-@Model.register("qasper_eqqa")
+@Model.register("qasper_eqqa_mlp")
 class QasperQualityEstimator(Model):
     def __init__(
         self,
