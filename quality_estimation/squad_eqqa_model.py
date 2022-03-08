@@ -27,6 +27,7 @@ class SquadEqqaModel(Model):
         padding_token_id: int = 1,
         one_class_weight: float = 0.2,
         regression_weight: float = 0.5,
+        two_stage: bool = True,
         **kwargs
     ):
         super().__init__(vocab, **kwargs)
@@ -52,21 +53,24 @@ class SquadEqqaModel(Model):
                 max_sequence_length, 1
             )
 
-        # Classifier predicts whether the F1 score is 1.0 or other.
-        if f1_range_classifier:
-            self.f1_range_classifier = f1_range_classifier
-        else:
-            self.f1_range_classifier = torch.nn.Linear(
-                max_sequence_length, 2
-            )
+        self.f1_range_classifier = None
+        if two_stage:
+            # Classifier predicts whether the F1 score is 1.0 or other.
+            if f1_range_classifier:
+                self.f1_range_classifier = f1_range_classifier
+            else:
+                self.f1_range_classifier = torch.nn.Linear(
+                    max_sequence_length, 2
+                )
+            self._range_classifier_loss_weights = [1 - one_class_weight, one_class_weight]
+            self._regression_weight = regression_weight
+            self._range_accuracy = Average()
 
         self._mae_metric = MeanAbsoluteError()
         self._predicted_f1 = Average()
-        self._range_classifier_loss_weights = [1 - one_class_weight, one_class_weight]
-        self._regression_weight = regression_weight
         self._regression_loss_function = MSELoss()
-        self._range_accuracy = Average()
         self._padding_token_id = padding_token_id
+        self._two_stage = two_stage
 
     def forward(
         self,
@@ -82,47 +86,56 @@ class SquadEqqaModel(Model):
         encoded_input = self._squad_embedder(question_and_context)
         # (batch_size, max_sequence_length)
         regression_input = self._output_projector(encoded_input).squeeze(-1)
-        # (batch_size, 2)
-        f1_range_prediction = self.f1_range_classifier(regression_input)
-
-        target_f1_range = (target_f1 == 1.0) * 1
-
-        loss_weights = torch.tensor(self._range_classifier_loss_weights, device=f1_range_prediction.device)
-        classifier_loss = torch.nn.functional.cross_entropy(
-                f1_range_prediction,
-                target_f1_range.squeeze(1),
-                weight=loss_weights,
-                reduction='none'
-        ).mean()
         # (batch_size, 1)
-        regression_predicted_f1 = torch.sigmoid(self._regression_layer(regression_input))
-        non_one_predicted_f1 = (target_f1_range == 0.0) * regression_predicted_f1
-        non_one_target_f1 = (target_f1_range == 0.0) * target_f1
-        regression_loss = self._regression_loss_function(non_one_predicted_f1, non_one_target_f1)
+        predicted_f1 = torch.sigmoid(self._regression_layer(regression_input))
+        output_dict = {}
+        if self._two_stage:
+            # (batch_size, 2)
+            f1_range_prediction = self.f1_range_classifier(regression_input)
 
-        predicted_range = torch.argmax(f1_range_prediction, 1).unsqueeze(1)
-        for instance_predicted_range, instance_target_range in zip(predicted_range, target_f1_range):
-            self._range_accuracy(instance_predicted_range == instance_target_range)
+            target_f1_range = (target_f1 == 1.0) * 1
 
-        combined_prediction = ((predicted_range == 1.0) * 1.0) + ((predicted_range == 0.0) * regression_predicted_f1)
+            loss_weights = torch.tensor(
+                    self._range_classifier_loss_weights,
+                    device=f1_range_prediction.device,
+                    dtype=torch.float
+            )
+            classifier_loss = torch.nn.functional.cross_entropy(
+                    f1_range_prediction,
+                    target_f1_range.squeeze(1),
+                    weight=loss_weights,
+                    reduction='none'
+            ).mean()
+            non_one_predicted_f1 = (target_f1_range == 0.0) * regression_predicted_f1
+            non_one_target_f1 = (target_f1_range == 0.0) * target_f1
+            regression_loss = self._regression_loss_function(non_one_predicted_f1, non_one_target_f1)
 
-        self._mae_metric(combined_prediction, target_f1)
-        for instance_predicted_f1 in combined_prediction:
+            predicted_range = torch.argmax(f1_range_prediction, 1).unsqueeze(1)
+            output_dict["predicted_range"] = predicted_range
+            for instance_predicted_range, instance_target_range in zip(predicted_range, target_f1_range):
+                self._range_accuracy(instance_predicted_range == instance_target_range)
+
+            predicted_f1 = ((predicted_range == 1.0) * 1.0) + ((predicted_range == 0.0) * predicted_f1)
+
+
+            loss = ((1 - self._regression_weight) * classifier_loss) + (self._regression_weight * regression_loss)
+        else:
+            loss = self._regression_loss_function(predicted_f1, target_f1)
+
+        self._mae_metric(predicted_f1, target_f1)
+        for instance_predicted_f1 in predicted_f1:
             self._predicted_f1(instance_predicted_f1)
-
-        loss = ((1 - self._regression_weight) * classifier_loss) + (self._regression_weight * regression_loss)
-
-        return {
-            "loss": loss,
-            "predicted_f1": combined_prediction,
-            "predicted_range": predicted_range,
-            "target_f1": target_f1,
-            "id": [d["question_id"] for d in metadata]
-        }
+        
+        output_dict["loss"] = loss
+        output_dict["predicted_f1"] = predicted_f1
+        output_dict["target_f1"] = target_f1
+        output_dict["id"] = [d["question_id"] for d in metadata]
+        return output_dict
 
     @overrides
     def get_metrics(self, reset: bool=False) -> Dict[str, float]:
         metrics = self._mae_metric.get_metric(reset)
         metrics["predicted_f1"] = self._predicted_f1.get_metric(reset)
-        metrics["range_accuracy"] = self._range_accuracy.get_metric(reset)
+        if self._two_stage:
+            metrics["range_accuracy"] = self._range_accuracy.get_metric(reset)
         return metrics
