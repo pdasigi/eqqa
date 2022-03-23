@@ -18,6 +18,7 @@ class QasperQualityEstimator(Model):
         transformer_model_name: str = "allenai/longformer-base-4096",
         attention_dropout: float = 0.1,
         attention_window_size: int = 1024,
+        max_position_embeddings: int = 4098,
         gradient_checkpointing: bool = False,
         regression_layer: FeedForward = None,
         **kwargs
@@ -26,6 +27,7 @@ class QasperQualityEstimator(Model):
         config = AutoConfig.from_pretrained(transformer_model_name)
         config.attention_dropout = attention_dropout
         config.attention_window = [attention_window_size] * len(config.attention_window)
+        config.max_position_embeddings = max_position_embeddings
         config.gradient_checkpointing = gradient_checkpointing
         self.transformer = AutoModel.from_pretrained(transformer_model_name, config=config)
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -57,7 +59,6 @@ class QasperQualityEstimator(Model):
             input_ids=input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
-            use_cache=False,
             return_dict=True
         )
         # (batch_size, lf_hidden_size)

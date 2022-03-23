@@ -39,6 +39,7 @@ class QasperEqqaReader(DatasetReader):
         padding_token: Optional[str] = "<pad>",
         include_global_attention_mask: bool = True,
         target_f1_type: str = "max_f1",
+        include_predictions: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -61,6 +62,8 @@ class QasperEqqaReader(DatasetReader):
         self._padding_token = padding_token
         assert target_f1_type in ["mean_f1", "max_f1"]
         self._target_f1_type = target_f1_type
+        self._include_predictions = include_predictions
+        self._log_data = defaultdict(int)
 
     @overrides
     def _read(self, file_path: str):
@@ -76,6 +79,10 @@ class QasperEqqaReader(DatasetReader):
             article["article_id"] = article_id
             yield from self._article_to_instances(article)
 
+        logger.info("Stats:")
+        for key, value in self._log_data.items():
+            logger.info(f"{key}: {value}")
+
     def _article_to_instances(self, article: Dict[str, Any]) -> Iterable[Instance]:
         paragraphs = self._get_paragraphs_from_article(article)
         tokenized_context = None
@@ -84,11 +91,13 @@ class QasperEqqaReader(DatasetReader):
         )
 
         for question_info in article["qas"]:
+            model_prediction = question_info["model_prediction"] if self._include_predictions else None
             yield self.text_to_instance(
                 question_info["question"],
                 tokenized_context,
                 paragraph_start_indices,
-                question_info[self._target_f1_type]
+                question_info[self._target_f1_type],
+                model_prediction
             )
 
     @overrides
@@ -98,6 +107,7 @@ class QasperEqqaReader(DatasetReader):
         tokenized_context: List[Token],
         paragraph_start_indices: List[int],
         target_f1: float = None,
+        model_prediction: str = None,
     ) -> Instance:
         fields = {}
 
@@ -105,19 +115,24 @@ class QasperEqqaReader(DatasetReader):
         if len(tokenized_question) > self.max_query_length:
             tokenized_question = tokenized_question[:self.max_query_length]
 
+        tokenized_prediction = self._tokenizer.tokenize(model_prediction) if model_prediction is not None else []
         allowed_context_length = (
                 self.max_document_length
                 - len(tokenized_question)
                 - len(self._tokenizer.sequence_pair_start_tokens)
-                - 1  # for paragraph seperator
+                - len(tokenized_prediction)
+                - 2  # for paragraph seperators
         )
 
+        if len(tokenized_context) > allowed_context_length:
+            self._log_data["truncated instances"] += 1
         tokenized_context = tokenized_context[:allowed_context_length]
 
-        # This is what Iz's code does.
         question_and_context = (
             self._tokenizer.sequence_pair_start_tokens
             + tokenized_question
+            + [Token(self._paragraph_separator)]
+            + tokenized_prediction
             + [Token(self._paragraph_separator)]
             + tokenized_context
         )
@@ -140,6 +155,8 @@ class QasperEqqaReader(DatasetReader):
         start_of_context = (
             len(self._tokenizer.sequence_pair_start_tokens)
             + len(tokenized_question)
+            + 1
+            + len(tokenized_prediction)
         )
 
         paragraph_indices_list = [x + start_of_context for x in paragraph_start_indices]
