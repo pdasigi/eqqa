@@ -113,7 +113,7 @@ class MochaEqqaReader(DatasetReader):
         def _tokenize(text, max_length):
             tokenized_text = self._tokenizer.tokenize(text)
             if len(tokenized_text) > max_length:
-                tokenized_text = tokenized_text[:self.max_length]
+                tokenized_text = tokenized_text[:max_length]
 
             return tokenized_text
 
