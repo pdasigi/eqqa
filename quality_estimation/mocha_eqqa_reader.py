@@ -155,13 +155,13 @@ class MochaEqqaReader(DatasetReader):
             attention_mask = [True for _ in answer_question]
 
         input_ids = TextField(answer_question)
-        fields["input_ids"] = input_ids
+        fields["input_text"] = input_ids
         # make the attention mask field
         fields["attention_mask"] = TensorField(torch.tensor(attention_mask))
-        fields["target_correctness"] = TensorField(torch.tensor([target_correctness]))
+        fields["target_correctness"] = TensorField(torch.tensor([target_correctness], dtype=torch.float16))
 
         return Instance(fields)
 
     @overrides
     def apply_token_indexers(self, instance: Instance) -> None:
-        instance.fields["input_ids"].token_indexers = self._token_indexers
+        instance.fields["input_text"].token_indexers = self._token_indexers
