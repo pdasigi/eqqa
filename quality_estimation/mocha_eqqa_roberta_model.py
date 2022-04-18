@@ -57,7 +57,7 @@ class QasperQualityEstimator(Model):
         # Define **METRICS** head
         # ----------------------------------------------------------------
         self._mae_metric = MeanAbsoluteError()
-        self._pearson_metric =  PearsonCorrelation()
+        # self._pearson_metric =  PearsonCorrelation()
 
     @property
     def embedding_dim(self):
@@ -101,7 +101,7 @@ class QasperQualityEstimator(Model):
             output_dict["target_correctness"] = target_correctness
 
             self._mae_metric(prediction, target_correctness)
-            self._pearson_metric(prediction, target_correctness)
+            # self._pearson_metric(prediction, target_correctness)
 
         return output_dict
 
@@ -109,7 +109,7 @@ class QasperQualityEstimator(Model):
     def get_metrics(self, reset: bool=False) -> Dict[str, float]:
        
         result = self._mae_metric.get_metric(reset)
-        result["pearson"] =  self._pearson_metric.get_metric(reset) 
+        # result["pearson"] =  self._pearson_metric.get_metric(reset) 
         ## ^Note: apparently MAE returns a dictionary, whereas
         ## pearson correlation returns one value
         return result
