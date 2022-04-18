@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 @Model.register("mocha_eqqa_roberta")
-class QasperQualityEstimator(Model):
+class MochaQualityEstimator(Model):
     def __init__(
         self,
         vocab: Vocabulary,
@@ -88,8 +88,7 @@ class QasperQualityEstimator(Model):
         
         # (batch_size, 1)
         prediction = self.regression_layer(regression_input)
-        # FIXME
-        # - Should we clip (1, 5)?
+        prediction = torch.sigmoid(prediction)
 
         output_dict = {
             "predicted_correctness": prediction,
@@ -99,6 +98,9 @@ class QasperQualityEstimator(Model):
             loss = self.loss(prediction, target_correctness)
             output_dict["loss"] = loss
             output_dict["target_correctness"] = target_correctness
+
+            if target_correctness < 0 or target_correctness > 1:
+                logger.warning(f"\n\ntarget correctness: {target_correctness.max()}")
 
             self._mae_metric(prediction, target_correctness)
             # self._pearson_metric(prediction, target_correctness)

@@ -3,7 +3,7 @@ local epochs = 10;
 local batch_size = 1;
 local num_gradient_accumulation_steps = 2;
 
-local train_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/mocha_eqqa_data/split__dev_candidates_only.json";
+local train_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/mocha_eqqa_data/split__train_candidates_only.json";
 local dev_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/mocha_eqqa_data/split__dev_candidates_only.json";
 
 local training_data_size = 520;

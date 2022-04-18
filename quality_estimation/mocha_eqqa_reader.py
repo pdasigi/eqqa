@@ -158,7 +158,10 @@ class MochaEqqaReader(DatasetReader):
         fields["input_text"] = input_ids
         # make the attention mask field
         fields["attention_mask"] = TensorField(torch.tensor(attention_mask))
-        fields["target_correctness"] = TensorField(torch.tensor([target_correctness], dtype=torch.float16))
+
+        # Apply min-max scaling
+        target = (target_correctness - 1) / (5-1)
+        fields["target_correctness"] = TensorField(torch.tensor([target], dtype=torch.float16))
 
         return Instance(fields)
 
