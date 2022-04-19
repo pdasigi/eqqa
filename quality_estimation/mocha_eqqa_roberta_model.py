@@ -18,11 +18,26 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 @Model.register("mocha_eqqa_roberta")
 class MochaQualityEstimator(Model):
+    def _init_layers(self):
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d):
+                torch.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    torch.nn.init.constant_(m.bias, 0)
+            elif isinstance(m, torch.nn.BatchNorm2d):
+                torch.nn.init.constant_(m.weight, 1)
+                torch.nn.init.constant_(m.bias, 0)
+            elif isinstance(m, torch.nn.Linear):
+                torch.nn.init.normal_(m.weight, 0, 0.01)
+                torch.nn.init.constant_(m.bias, 0)     
+
+
     def __init__(
         self,
         vocab: Vocabulary,
         transformer_model_name: str = "roberta-base",
         hidden_size: int = 1,
+        train_base: bool = False,
         **kwargs
     ):
         super().__init__(vocab, **kwargs)
@@ -30,8 +45,9 @@ class MochaQualityEstimator(Model):
         self.transformer = AutoModel.from_pretrained(transformer_model_name, config=config)
 
         # We do not want to train the base transformer models
-        for _, param in self.transformer.named_parameters():
-            param.requires_grad = False
+        if not train_base:
+            for _, param in self.transformer.named_parameters():
+                param.requires_grad = False
         
         self.tokenizer = AutoTokenizer.from_pretrained(
             transformer_model_name,
@@ -50,7 +66,8 @@ class MochaQualityEstimator(Model):
                 torch.nn.Linear(hidden_size, 1),
                 ])
         self.regression_layer = torch.nn.Sequential(*self.regression_layer)
-        
+        self._init_layers()
+
         self.loss = MSELoss()
 
         # ----------------------------------------------------------------
@@ -81,6 +98,7 @@ class MochaQualityEstimator(Model):
             attention_mask=attention_mask,
             return_dict=True
         )
+
         # (batch_size, lf_hidden_size)
         regression_input = output['pooler_output']
         # ^Note: 
@@ -98,9 +116,6 @@ class MochaQualityEstimator(Model):
             loss = self.loss(prediction, target_correctness)
             output_dict["loss"] = loss
             output_dict["target_correctness"] = target_correctness
-
-            if target_correctness < 0 or target_correctness > 1:
-                logger.warning(f"\n\ntarget correctness: {target_correctness.max()}")
 
             self._mae_metric(prediction, target_correctness)
             # self._pearson_metric(prediction, target_correctness)
