@@ -152,16 +152,11 @@ class MochaEqqaReader(DatasetReader):
         fields["attention_mask"] = TensorField(torch.tensor(attention_mask))
 
         # Apply min-max scaling
-        if (target_correctness < 1).any() or (target_correctness > 5).any():
+        if (target_correctness < 1) or (target_correctness > 5):
             logger.warning(f"Target correctness should be in the interval (1, 5) but {target_correctness}.")
 
         target = (target_correctness - 1) / (5-1)
-
-            
         fields["target_correctness"] = TensorField(torch.tensor([target], dtype=torch.float16))
-        
-
-        logger.info(f"Truncated instances: {self._log_data['truncated instances']}")
         return Instance(fields)
 
     @overrides
