@@ -24,3 +24,10 @@ Note: In the outline above, we assume you are have CULDA TOOLKIT 11. You will
 have to update the version in step 2 accordingly, in case your version differs.
 Moreover, note that since `allennlp` version 2.5.0 requires pytorch 1.8, we
 opt for pre-installing that version in our environment.
+
+
+## Running 
+
+```
+$ allennlp train training_config/qasper_eqqa.jsonnet -s data/qasper_models --include-package quality_estimation
+```
