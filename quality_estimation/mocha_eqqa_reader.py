@@ -121,6 +121,7 @@ class MochaEqqaReader(DatasetReader):
             - len(tokenized_answer)
             - 1 # paragraph selector
         )
+        allowed_question_length = min(self.max_query_length, allowed_question_length)
         tokenized_question, truncated_question = \
             _tokenize(question, allowed_question_length)
 

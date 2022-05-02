@@ -1,6 +1,6 @@
 local transformer_model = "roberta-base";
 local epochs = 10;
-local batch_size = 64;
+local batch_size = 16;
 local num_gradient_accumulation_steps = 1;
 
 local train_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/mocha_eqqa_data/split__train_candidates_only.json";
