@@ -103,16 +103,26 @@ class MochaEqqaReader(DatasetReader):
         context: str = None,
     ) -> Instance:
         def _tokenize(text, max_length):
+            truncated = False
             tokenized_text = self._tokenizer.tokenize(text)
             if len(tokenized_text) > max_length:
                 tokenized_text = tokenized_text[:max_length]
-
-            return tokenized_text
+                truncated=True
+            return tokenized_text, truncated
 
         fields = {}
 
-        tokenized_question = _tokenize(question, self.max_query_length)
-        tokenized_answer = _tokenize(answer, self.max_answer_length)
+        tokenized_answer, _ = _tokenize(answer, self.max_answer_length)
+
+        # Determine remaining length for question 
+        # (this accounts for longer question-answer pairs)
+        allowed_question_length = (
+            self.max_document_length
+            - len(tokenized_answer)
+            - 1 # paragraph selector
+        )
+        tokenized_question, truncated_question = \
+            _tokenize(question, allowed_question_length)
 
         # Determine remaining length for context (if specified)
         allowed_context_length = (
@@ -123,12 +133,13 @@ class MochaEqqaReader(DatasetReader):
         )
 
         use_context = context is not None
-        tokenized_context = _tokenize(context, allowed_context_length) \
-            if use_context else []
-                
+        tokenized_context, truncated_context = \
+            _tokenize(context, allowed_context_length) if use_context else []
 
-        if use_context and len(tokenized_context) > allowed_context_length:
+        if truncated_question or (use_context and truncated_context):
             self._log_data["truncated instances"] += 1
+            if truncated_question:
+                self._log_data["truncated question"] += 1
 
         answer_question = (
             tokenized_answer
