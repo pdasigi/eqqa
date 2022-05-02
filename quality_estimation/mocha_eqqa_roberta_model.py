@@ -77,7 +77,7 @@ class MochaQualityEstimator(Model):
 
     @property
     def embedding_dim(self):
-        return self.transformer.embeddings.word_embeddings.embedding_dim
+        return self.transformer.config.hidden_size
 
     def forward(
         self,
