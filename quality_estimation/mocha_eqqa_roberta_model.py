@@ -18,19 +18,6 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 @Model.register("mocha_eqqa_roberta")
 class MochaQualityEstimator(Model):
-    def _init_layers(self):
-        for m in self.modules():
-            if isinstance(m, torch.nn.Conv2d):
-                torch.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                if m.bias is not None:
-                    torch.nn.init.constant_(m.bias, 0)
-            elif isinstance(m, torch.nn.BatchNorm2d):
-                torch.nn.init.constant_(m.weight, 1)
-                torch.nn.init.constant_(m.bias, 0)
-            elif isinstance(m, torch.nn.Linear):
-                torch.nn.init.normal_(m.weight, 0, 0.01)
-                torch.nn.init.constant_(m.bias, 0)     
-
 
     def __init__(
         self,
@@ -65,8 +52,6 @@ class MochaQualityEstimator(Model):
                 torch.nn.Linear(hidden_size, 1),
                 ])
         self.regression_layer = torch.nn.Sequential(*self.regression_layer)
-        self._init_layers()
-
         self.loss = MSELoss()
 
         # ----------------------------------------------------------------
