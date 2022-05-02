@@ -41,8 +41,7 @@ class MochaQualityEstimator(Model):
         **kwargs
     ):
         super().__init__(vocab, **kwargs)
-        config = AutoConfig.from_pretrained(transformer_model_name)
-        self.transformer = AutoModel.from_pretrained(transformer_model_name, config=config)
+        self.transformer = AutoModel.from_pretrained(transformer_model_name)
 
         # We do not want to train the base transformer models
         if not train_base:
