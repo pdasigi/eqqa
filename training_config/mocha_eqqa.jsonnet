@@ -52,7 +52,7 @@ local num_gpus = 1;
       "num_gradient_accumulation_steps": num_gradient_accumulation_steps,
       "patience": epochs,
       "enable_default_callbacks": false,
-      "use_amp": true,
+      "use_amp": false,
       "cuda_device": 0
     },
     "pytorch_seed": 15371,
