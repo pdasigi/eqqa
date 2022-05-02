@@ -83,14 +83,10 @@ class MochaQualityEstimator(Model):
     def forward(
         self,
         input_text: TextFieldTensors,
-        attention_mask: torch.Tensor,
         target_correctness: torch.Tensor = None,
     ) -> Dict[str, torch.Tensor]:
 
         input_ids = util.get_token_ids_from_text_field_tensors(input_text)
-        
-        # FIXME 
-        # - Why do we overwrite our attention mask? 
         attention_mask = util.get_text_field_mask(input_text)
 
         output = self.transformer(

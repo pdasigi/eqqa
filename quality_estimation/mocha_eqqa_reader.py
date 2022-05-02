@@ -149,18 +149,8 @@ class MochaEqqaReader(DatasetReader):
             + tokenized_context
         )
 
-        if len(answer_question) < self.max_document_length:
-            original_answer_question_length = len(answer_question)
-            padding_length = self.max_document_length - original_answer_question_length
-            answer_question = answer_question + [Token(self._padding_token)] * padding_length
-            attention_mask = ([True] * original_answer_question_length) + ([False] * padding_length)
-        else:
-            attention_mask = [True for _ in answer_question]
-
         input_ids = TextField(answer_question)
         fields["input_text"] = input_ids
-        # make the attention mask field
-        fields["attention_mask"] = TensorField(torch.tensor(attention_mask))
 
         # Apply min-max scaling
         if (target_correctness < 1) or (target_correctness > 5):
