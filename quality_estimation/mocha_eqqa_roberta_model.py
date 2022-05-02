@@ -37,7 +37,7 @@ class MochaQualityEstimator(Model):
         vocab: Vocabulary,
         transformer_model_name: str = "roberta-base",
         hidden_size: int = 1,
-        train_base: bool = False,
+        train_base: bool = True,
         **kwargs
     ):
         super().__init__(vocab, **kwargs)
