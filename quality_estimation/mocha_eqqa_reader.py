@@ -93,9 +93,9 @@ class MochaEqqaReader(DatasetReader):
         #   ..., 
         #   "metric_m": ..., 
         # }
-        example = next(iter(dataset.items()))
+        example = next(iter(dataset.values()))
         metrics = self.get_metrics(example)
-        self._log_data["target_metrics"] = metrics.keys()
+        self._log_data["target_metrics"] = metrics
 
         for example_id, example in dataset.items():
             example_context = example["context"] if self.include_context else None
@@ -188,7 +188,7 @@ class MochaEqqaReader(DatasetReader):
 
     def get_metrics(self, example: Dict[str, any]) -> Tuple[str, float]:
         metrics = (m for m in sorted(example.keys()) if m in self.target_metrics)
-        return Tuple((m, float32(example[m])) for m in metrics)
+        return tuple((m, float(example[m])) for m in metrics)
 
     def get_correctness(self, target):
         if target is None:
