@@ -128,8 +128,8 @@ class MochaEqqaReader(DatasetReader):
         question: str,
         candidate: str,
         reference: str,
-        target_metrics: Tuple[str, float32],
-        target_correctness: float16 = None,
+        target_metrics: Tuple[str, float],
+        target_correctness: float = None,
         context: str = None,
     ) -> Instance:
 
@@ -186,11 +186,11 @@ class MochaEqqaReader(DatasetReader):
     def is_included(self, name):
         return self.target_datasets == "*" or (name in self.target_datasets)
 
-    def get_metrics(self, example: Dict[str, any]) -> Tuple[str, float32]:
+    def get_metrics(self, example: Dict[str, any]) -> Tuple[str, float]:
         metrics = (m for m in sorted(example.keys()) if m in self.target_metrics)
         return Tuple((m, float32(example[m])) for m in metrics)
 
-    def get_correctness(self, target) -> TensorField[float16]:
+    def get_correctness(self, target):
         if target is None:
             return None
 
