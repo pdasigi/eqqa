@@ -2,7 +2,6 @@ import json
 import logging
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Iterable, Tuple
-from torch import float16, float32
 
 from overrides import overrides
 import torch
@@ -10,6 +9,7 @@ import torch
 from allennlp.data.fields import (
     TextField,
     TensorField,
+    MetadataField,
 )
 from allennlp.common.file_utils import cached_path, open_compressed
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
@@ -72,7 +72,7 @@ class MochaEqqaReader(DatasetReader):
 
         logger.info("Reading json file at %s", file_path)
         with open_compressed(file_path) as dataset_file:
-            data = json.load(dataset_file)
+            data = json.load(dataset_file, )
         
         for dataset_name, dataset in self.shard_iterable(data.items()):
             if self.is_included(dataset_name):
@@ -128,11 +128,10 @@ class MochaEqqaReader(DatasetReader):
         question: str,
         candidate: str,
         reference: str,
-        target_metrics: Tuple[str, float],
+        target_metrics: List[Tuple[str, float]],
         target_correctness: float = None,
         context: str = None,
     ) -> Instance:
-
         def _tokenize(text, max_length):
             truncated = False
             tokenized_text = self._tokenizer.tokenize(text)
@@ -176,9 +175,10 @@ class MochaEqqaReader(DatasetReader):
         })
 
         fields["input_text"] = TextField(input_text)
+
         metrics, values = zip(*target_metrics) # FIXME - Handle NaNs
-        fields["target_metrics_names"] = metrics
-        fields["target_metrics_values"] = TensorField(torch.tensor(values, dtype=torch.float16))
+        fields["metadata"] = MetadataField({"target_metrics_names": metrics})
+        fields["target_metrics"] = TensorField(torch.tensor(values, dtype=torch.float16))
         
         fields["target_correctness"] = self.get_correctness(target_correctness)
         return Instance(fields)
@@ -186,7 +186,7 @@ class MochaEqqaReader(DatasetReader):
     def is_included(self, name):
         return self.target_datasets == "*" or (name in self.target_datasets)
 
-    def get_metrics(self, example: Dict[str, any]) -> Tuple[str, float]:
+    def get_metrics(self, example: Dict[str, any]) -> Tuple[Tuple[str, float]]:
         metrics = (m for m in sorted(example.keys()) if m in self.target_metrics)
         return tuple((m, float(example[m])) for m in metrics)
 

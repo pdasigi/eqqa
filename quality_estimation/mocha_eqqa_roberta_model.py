@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 from overrides import overrides
 from allennlp.data import TextFieldTensors, Vocabulary
 from allennlp.models.model import Model
@@ -74,12 +74,10 @@ class MochaMetricModeling(Model):
             regr_inputs = self.decoder_network.get_output_dim()
             self.n_objectives = n_objectives
 
-            self.regression_layer = [torch.nn.Linear(
+            self.regression_layer = torch.nn.Linear(
                 regr_inputs, n_objectives
-            )]
-        
+            )
         assert self.n_objectives == n_objectives, "Dimension mismatch!"
-        self.regression_layer = torch.nn.Sequential(*self.regression_layer)
 
         # ----------------------------------------------------------------
         # Define **METRICS** head
@@ -99,8 +97,9 @@ class MochaMetricModeling(Model):
     def forward(
         self,
         input_text: TextFieldTensors,
-        target_metrics: Tuple[str, torch.Tensor] = None,
+        target_metrics: torch.Tensor = None,
         target_correctness: torch.Tensor = None,
+        metadata: Dict[str, Any] = None,
     ) -> Dict[str, torch.Tensor]:
 
         input_ids = util.get_token_ids_from_text_field_tensors(input_text)
@@ -124,23 +123,25 @@ class MochaMetricModeling(Model):
         #prediction = torch.sigmoid(prediction)
 
         output_dict = {
-            "predicted_correctness": prediction,
+            "predicted_correctness": encoder_output,
         }
 
         if target_metrics is not None:
+            target_metric_names = [m["target_metrics_names"][0] for m in metadata]
             loss_all_metrics = []
-            for metric_name, metric_value in target_metrics:
+
+            for metric_name, metric_value in zip(target_metric_names, target_metrics):
                 metric_id = self.target_metrics2id[metric_name]
 
                 loss = self._regression_losses[metric_id]
-                loss = loss(prediction[:, metric_id], metric_value)
+                loss = loss(prediction[metric_id,:], metric_value)
 
                 output_dict[f"loss_{metric_name}"] = loss
                 output_dict[f"predicted_{metric_name}"] = prediction[:, metric_id]
                 output_dict[f"target_{metric_name}"] = metric_value
                 loss_all_metrics.append(loss)
 
-            output_dict["avg_reg_loss"] = sum(loss_all_metrics) / len(loss_all_metrics)
+            output_dict["loss"] = sum(loss_all_metrics) / len(loss_all_metrics)
             output_dict["max_reg_loss"] = max(loss_all_metrics)
         
         if target_correctness is not None:
