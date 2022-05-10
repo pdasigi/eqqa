@@ -1,7 +1,7 @@
 local transformer_model = "roberta-base";
 local epochs = 10;
-local batch_size = 16;
-local num_gradient_accumulation_steps = 1;
+local batch_size = 4;
+local num_gradient_accumulation_steps = 2;
 
 local train_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/mocha_eqqa_data/split__train_candidates_only.json";
 local dev_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/mocha_eqqa_data/split__dev_candidates_only.json";
@@ -9,14 +9,20 @@ local dev_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/mocha
 local training_data_size = 512;
 local num_gpus = 1;
 
+local target_metrics = ["meteor", "rougeL", "bleurt", "precision", "recall"],
+local target_correctness = "human_correctness"
+
 {
     "dataset_reader": {
         "type": "mocha_eqqa",
         "transformer_model_name": transformer_model,
+        "target_correctness": target_correctness,
+        "target_metrics": target_metrics,
+        "target_datasets": ["drop"],
         "max_answer_length": 100,
         "max_query_length": 100,
         "max_document_length": 512,
-        "include_context": true
+        "include_context": true,
     },
     "train_data_path": train_data_path,
     "validation_data_path": dev_data_path,
@@ -26,7 +32,23 @@ local num_gpus = 1;
     "model": {
         "type": "mocha_eqqa_roberta",
         "hidden_size": 256,
-        "train_base": true
+        "train_base": true,
+        "target_metrics": target_metrics,
+        "target_correctness": target_correctness,
+        "encoder_output_projector": {
+          "input_dim": 768,
+          "num_layers": 2,
+          "hidden_dims": [384, 1],
+          "activations": "tanh",
+          "dropout": 0.1
+	      },
+        "decoder_output_projector": {
+          "input_dim": 1,
+          "num_layers": 2,
+          "hidden_dims": [16, 32],
+          "activations": "tanh",
+          "dropout": 0.1
+        }
     },
     "data_loader": {
         "batch_size": batch_size
@@ -52,8 +74,8 @@ local num_gpus = 1;
       "num_gradient_accumulation_steps": num_gradient_accumulation_steps,
       "patience": epochs,
       "enable_default_callbacks": false,
-      "use_amp": false,
+      "use_amp": true,
       "cuda_device": 0
     },
-    "pytorch_seed": 15371,
+    "pytorch_seed": 4849,
 }

@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-@Model.register("mm_eqqa_roberta")
+@Model.register("mocha_eqqa_roberta")
 class MochaMetricModeling(Model):
 
     def __init__(
@@ -71,7 +71,7 @@ class MochaMetricModeling(Model):
             self.regression_layer = regression_layer
             self.n_objectives = regression_layer.get_output_dim()
         else:
-            regr_inputs = self.decoder_network.get_input_dim()
+            regr_inputs = self.decoder_network.get_output_dim()
             self.n_objectives = n_objectives
 
             self.regression_layer = torch.nn.Linear(
