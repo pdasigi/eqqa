@@ -3,8 +3,8 @@ local epochs = 10;
 local batch_size = 4;
 local num_gradient_accumulation_steps = 2;
 
-local train_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/metric-modeling/preproc/train_split_test_015_1231331.json";
-local dev_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/metric-modeling/preproc/dev_split_test_015_1231331";
+local train_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/metric-modeling/preproc/train_split_test_015_1231331_w_context.json";
+local dev_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/metric-modeling/preproc/dev_split_test_015_1231331_w_context.json";
 
 local training_data_size = 512;
 local num_gpus = 1;
@@ -31,18 +31,17 @@ local target_correctness = "human_correctness";
     },
     "model": {
         "type": "mocha_eqqa_roberta",
-        "hidden_size": 256,
         "train_base": true,
         "target_metrics": target_metrics,
         "target_correctness": target_correctness,
-        "encoder_output_projector": {
+        "encoder_network": {
           "input_dim": 768,
           "num_layers": 2,
           "hidden_dims": [384, 1],
           "activations": "tanh",
           "dropout": 0.1
 	      },
-        "decoder_output_projector": {
+        "decoder_network": {
           "input_dim": 1,
           "num_layers": 2,
           "hidden_dims": [16, 32],

@@ -74,9 +74,9 @@ class MochaMetricModeling(Model):
             regr_inputs = self.decoder_network.get_output_dim()
             self.n_objectives = n_objectives
 
-            self.regression_layer = torch.nn.Linear(
+            self.regression_layer = [torch.nn.Linear(
                 regr_inputs, n_objectives
-            )
+            )]
         
         assert self.n_objectives == n_objectives, "Dimension mismatch!"
         self.regression_layer = torch.nn.Sequential(*self.regression_layer)
