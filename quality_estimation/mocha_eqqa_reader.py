@@ -2,10 +2,9 @@ import json
 import logging
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Iterable, Tuple
-from numpy import float32
+from torch import float16, float32
 
 from overrides import overrides
-from responses import target
 import torch
 
 from allennlp.data.fields import (
@@ -26,6 +25,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 class MochaEqqaReader(DatasetReader):
     def __init__(
         self,
+        target_correctness: str,
         target_metrics: List[str],
         transformer_model_name: str = "roberta-base",
         target_datasets: List[str] = "*",
@@ -50,8 +50,10 @@ class MochaEqqaReader(DatasetReader):
             "tokens": PretrainedTransformerIndexer(transformer_model_name)
         }
 
-        self.target_datasets = target_datasets
+        self.target_correctness = target_correctness
         self.target_metrics = target_metrics
+
+        self.target_datasets = target_datasets
         self.include_context = include_context
         
         self.max_answer_length = max_answer_length
@@ -105,7 +107,7 @@ class MochaEqqaReader(DatasetReader):
                 question=example["question"],
                 candidate=example["candidate"],
                 reference=example["reference"],
-
+                target_correctness=example.get(self.target_correctness, None),
             )
 
     def _log_truncated(self, truncated_artifacts):
@@ -127,6 +129,7 @@ class MochaEqqaReader(DatasetReader):
         candidate: str,
         reference: str,
         target_metrics: Tuple[str, float32],
+        target_correctness: float16 = None,
         context: str = None,
     ) -> Instance:
 
@@ -173,10 +176,11 @@ class MochaEqqaReader(DatasetReader):
         })
 
         fields["input_text"] = TextField(input_text)
-
         metrics, values = zip(*target_metrics) # FIXME - Handle NaNs
         fields["target_metrics_names"] = metrics
         fields["target_metrics_values"] = TensorField(torch.tensor(values, dtype=torch.float16))
+        
+        fields["target_correctness"] = self.get_correctness(target_correctness)
         return Instance(fields)
 
     def is_included(self, name):
@@ -185,3 +189,14 @@ class MochaEqqaReader(DatasetReader):
     def get_metrics(self, example: Dict[str, any]) -> Tuple[str, float32]:
         metrics = (m for m in sorted(example.keys()) if m in self.target_metrics)
         return Tuple((m, float32(example[m])) for m in metrics)
+
+    def get_correctness(self, target) -> TensorField[float16]:
+        if target is None:
+            return None
+
+        if not (0 <= target <= 1):
+            logger.warning(
+                f"{self.target_correctness} should be in (0, 1) but is {target}")
+
+        return TensorField(torch.tensor([target], dtype=torch.float16))
+
