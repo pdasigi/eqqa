@@ -1,7 +1,7 @@
 import json
 import logging
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Iterable
+from typing import Any, Dict, List, Optional, Iterable, Tuple
 
 from overrides import overrides
 import torch
@@ -9,6 +9,7 @@ import torch
 from allennlp.data.fields import (
     TextField,
     TensorField,
+    MetadataField,
 )
 from allennlp.common.file_utils import cached_path, open_compressed
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
@@ -24,11 +25,13 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 class MochaEqqaReader(DatasetReader):
     def __init__(
         self,
+        target_correctness: str,
+        target_metrics: List[str],
         transformer_model_name: str = "roberta-base",
+        target_datasets: List[str] = "*",
         max_answer_length: int = 100,
         max_query_length: int = 100,
         max_document_length: int = 512,
-        exclude_datasets: Optional[List[str]] = None,
         include_context: bool = True,
         paragraph_separator: Optional[str] = "</s>",
         padding_token: Optional[str] = "<pad>",
@@ -43,18 +46,20 @@ class MochaEqqaReader(DatasetReader):
         self._tokenizer = PretrainedTransformerTokenizer(
             transformer_model_name, add_special_tokens=False
         )
-
         self._token_indexers = {
             "tokens": PretrainedTransformerIndexer(transformer_model_name)
         }
 
+        self.target_correctness = target_correctness
+        self.target_metrics = target_metrics
+
+        self.target_datasets = target_datasets
+        self.include_context = include_context
+        
         self.max_answer_length = max_answer_length
         self.max_query_length = max_query_length
         self.max_document_length = max_document_length
-        self.exclude_datasets = exclude_datasets
 
-        self.include_context = include_context
-        
         self._paragraph_separator = paragraph_separator
         self._padding_token = padding_token
         
@@ -67,39 +72,64 @@ class MochaEqqaReader(DatasetReader):
 
         logger.info("Reading json file at %s", file_path)
         with open_compressed(file_path) as dataset_file:
-            data = json.load(dataset_file)
+            data = json.load(dataset_file, )
         
         for dataset_name, dataset in self.shard_iterable(data.items()):
-            # Skip dataset if user restricted the datasets to train on
-            if (self.exclude_datasets is not None and dataset_name in self.exclude_datasets):
-                continue
-
-            yield from self._dataset_to_instances(dataset)
-
+            if self.is_included(dataset_name):
+                yield from self._dataset_to_instances(dataset)
+            
         logger.info("Stats:")
         for key, value in self._log_data.items():
             logger.info(f"{key}: {value}")
 
-
     def _dataset_to_instances(self, dataset: Dict[str, Any]) -> Iterable[Instance]:
-        # Each dataset is composed of {example_id1: example, ...}        
+        # Each example is composed of 
+        # {
+        #   "context": ...,
+        #   "question": ...,
+        #   "reference": ...,
+        #   "candidate": ...,
+        #   "metric_1": ..., 
+        #   ..., 
+        #   "metric_m": ..., 
+        # }
+        example = next(iter(dataset.values()))
+        metrics = self.get_metrics(example)
+        self._log_data["target_metrics"] = metrics
 
         for example_id, example in dataset.items():
             example_context = example["context"] if self.include_context else None
+            target_metrics = self.get_metrics(example)
 
             yield self.text_to_instance(
+                target_metrics=target_metrics,
                 context=example_context,
                 question=example["question"],
-                answer=example["answer"],
-                target_correctness=example["correctness"],
+                candidate=example["candidate"],
+                reference=example["reference"],
+                target_correctness=example.get(self.target_correctness, None),
             )
+
+    def _log_truncated(self, truncated_artifacts):
+        truncated = []
+        for param_name, is_truncated in truncated_artifacts.items():
+            self._log_data[f"truncated_{param_name}"] += 1
+            truncated.append(is_truncated)
+
+        self._log_data[f"truncated_example"] += int(any(truncated))
+
+    @overrides
+    def apply_token_indexers(self, instance: Instance) -> None:
+        instance.fields["input_text"].token_indexers = self._token_indexers
 
     @overrides
     def text_to_instance(
         self,  # type: ignore  # pylint: disable=arguments-differ
         question: str,
-        answer: str,
-        target_correctness: float,
+        candidate: str,
+        reference: str,
+        target_metrics: List[Tuple[str, float]],
+        target_correctness: float = None,
         context: str = None,
     ) -> Instance:
         def _tokenize(text, max_length):
@@ -111,56 +141,62 @@ class MochaEqqaReader(DatasetReader):
             return tokenized_text, truncated
 
         fields = {}
+        input_text = []
 
-        tokenized_answer, _ = _tokenize(answer, self.max_answer_length)
+        tokenized_can, truncated_can = _tokenize(candidate, self.max_answer_length)
+        tokenized_ref, truncated_ref = _tokenize(reference, self.max_answer_length)
+        
+        input_text += tokenized_can
+        input_text += [Token(self._paragraph_separator)] + tokenized_ref
 
         # Determine remaining length for question 
         # (this accounts for longer question-answer pairs)
         allowed_question_length = (
-            self.max_document_length
-            - len(tokenized_answer)
-            - 1 # paragraph selector
+            self.max_document_length - len(input_text) - 1 # paragraph selector
         )
-        allowed_question_length = min(self.max_query_length, allowed_question_length)
-        tokenized_question, truncated_question = \
-            _tokenize(question, allowed_question_length)
 
+        allowed_question_length = min(self.max_query_length, allowed_question_length)
+        tokenized_question, truncated_question = _tokenize(question, allowed_question_length)
+
+        input_text += [Token(self._paragraph_separator)] + tokenized_question
         # Determine remaining length for context (if specified)
         allowed_context_length = (
-                self.max_document_length
-                - len(tokenized_question)
-                - len(tokenized_answer)
-                - 2  # for paragraph separators
+                self.max_document_length - len(input_text) - 1  # for paragraph separator
         )
 
         use_context = context is not None
         tokenized_context, truncated_context = \
-            _tokenize(context, allowed_context_length) if use_context else []
+            _tokenize(context, allowed_context_length) if use_context else ([], False)
 
-        if truncated_question or (use_context and truncated_context):
-            self._log_data["truncated instances"] += 1
-            if truncated_question:
-                self._log_data["truncated question"] += 1
+        input_text += [Token(self._paragraph_separator)] + tokenized_context
+        self._log_truncated({
+            "context": truncated_context, "question": truncated_question,
+            "candidate": truncated_can,   "reference": truncated_ref,
+        })
 
-        answer_question = (
-            tokenized_answer
-            + [Token(self._paragraph_separator)]
-            + tokenized_question
-            + [Token(self._paragraph_separator)]
-            + tokenized_context
-        )
+        fields["input_text"] = TextField(input_text)
 
-        input_ids = TextField(answer_question)
-        fields["input_text"] = input_ids
-
-        # Apply min-max scaling
-        if (target_correctness < 1) or (target_correctness > 5):
-            logger.warning(f"Target correctness should be in the interval (1, 5) but {target_correctness}.")
-
-        target = (target_correctness - 1) / (5-1)
-        fields["target_correctness"] = TensorField(torch.tensor([target], dtype=torch.float16))
+        metrics, values = zip(*target_metrics) # FIXME - Handle NaNs
+        fields["metadata"] = MetadataField({"target_metrics_names": metrics})
+        fields["target_metrics"] = TensorField(torch.tensor(values, dtype=torch.float16))
+        
+        fields["target_correctness"] = self.get_correctness(target_correctness)
         return Instance(fields)
 
-    @overrides
-    def apply_token_indexers(self, instance: Instance) -> None:
-        instance.fields["input_text"].token_indexers = self._token_indexers
+    def is_included(self, name):
+        return self.target_datasets == "*" or (name in self.target_datasets)
+
+    def get_metrics(self, example: Dict[str, any]) -> Tuple[Tuple[str, float]]:
+        metrics = (m for m in sorted(example.keys()) if m in self.target_metrics)
+        return tuple((m, float(example[m])) for m in metrics)
+
+    def get_correctness(self, target):
+        if target is None:
+            return None
+
+        if not (0 <= target <= 1):
+            logger.warning(
+                f"{self.target_correctness} should be in (0, 1) but is {target}")
+
+        return TensorField(torch.tensor([target], dtype=torch.float16))
+
