@@ -170,12 +170,21 @@ def generate_candidates_uqa(input_dir, output_dir, model_name, filename, n=None,
         # - Add diversity penalty (?)
         # - Add perturbation to generated answers or confidence threshold (?)
         if i % 100 == 0:
+            from metrics import compute_metrics
+            metrics = compute_metrics(final_dataset)
+            for example_id in final_dataset.keys():
+                final_dataset[example_id].update(metrics[example_id])
             write_json(output_filepath, final_dataset, mode="a+")
             final_dataset = defaultdict(dict) # works like a buffer
 
         if n is not None and i > n:
             if len(final_dataset) != 0:
-                write_json("out", final_dataset, mode="a+")
+                from metrics import compute_metrics
+                metrics = compute_metrics(final_dataset)
+                for example_id in final_dataset.keys():
+                    final_dataset[example_id].update(metrics[example_id])
+
+                write_json(output_filepath, final_dataset, mode="a+")
             break
 
     print("Generation finished...")
@@ -197,7 +206,7 @@ if __name__ == "__main__":
         input_dir,
         output_dir,
         model_name="allenai/unifiedqa-t5-small", 
-        filename="unifiedqa-t5-small-20",
-        n=20,
+        filename="unifiedqa-t5-small-10",
+        n=10,
         **generation_kwargs,
     )

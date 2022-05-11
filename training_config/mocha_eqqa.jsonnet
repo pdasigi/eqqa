@@ -1,5 +1,5 @@
 local transformer_model = "roberta-base";
-local epochs = 10;
+local epochs = 100;
 local batch_size = 4;
 local num_gradient_accumulation_steps = 2;
 
@@ -18,7 +18,7 @@ local target_correctness = "human_correctness";
         "transformer_model_name": transformer_model,
         "target_correctness": target_correctness,
         "target_metrics": target_metrics,
-        "target_datasets": ["drop"],
+        "target_datasets": ["drop", "cosmosqa"],
         "max_answer_length": 100,
         "max_query_length": 100,
         "max_document_length": 512,
