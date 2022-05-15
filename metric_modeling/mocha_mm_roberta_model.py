@@ -50,7 +50,6 @@ class MochaMetricModeling(Model):
         else:
             self.encoder_network = torch.nn.Sequential([
                 torch.nn.Linear(self.embedding_dim, 1),
-                torch.nn.ReLU(inplace=True),
             ])
 
         # ----------------------------------------------------------------
@@ -66,6 +65,9 @@ class MochaMetricModeling(Model):
         
         # ----------------------------------------------------------------
         # Define **Regression** head
+        # ----------------------------------------------------------------
+        # regression layer refers to the layer where each loss will be
+        # computed.
         # ----------------------------------------------------------------
         if regression_layer:
             self.regression_layer = regression_layer
@@ -83,9 +85,8 @@ class MochaMetricModeling(Model):
         # Define **METRICS** head
         # ----------------------------------------------------------------
         self.target_metrics = target_metrics
-        self.target_metrics2id = {m: i for i, m in enumerate(target_metrics)}
         self.target_correctness = target_correctness
-        self._regression_losses = [MSELoss() for i in range(n_objectives)]
+        self._regression_losses = {m: MSELoss() for m in target_metrics}
 
         self._mae_metric = MeanAbsoluteError()
         # self._pearson_metric =  PearsonCorrelation()
@@ -120,24 +121,23 @@ class MochaMetricModeling(Model):
         
         # (batch_size, n_objectives)
         prediction = self.regression_layer(decoder_output)
-        #prediction = torch.sigmoid(prediction)
 
         output_dict = {
             "predicted_correctness": encoder_output,
         }
 
         if target_metrics is not None:
-            target_metric_names = [m["target_metrics_names"][0] for m in metadata]
+            # It should be a list with tuples w/ metric names
+            target_metric_names = metadata[0]["target_metrics_names"]
             loss_all_metrics = []
 
-            for metric_name, metric_value in zip(target_metric_names, target_metrics):
-                metric_id = self.target_metrics2id[metric_name]
-
-                loss = self._regression_losses[metric_id]
-                loss = loss(prediction[metric_id,:], metric_value)
+            for i, metric_name in enumerate(target_metric_names):
+                metric_value = target_metrics[:, i]
+                loss_fn = self._regression_losses[metric_name]
+                loss = loss_fn(prediction[:, i], metric_value)
 
                 output_dict[f"loss_{metric_name}"] = loss
-                output_dict[f"predicted_{metric_name}"] = prediction[:, metric_id]
+                output_dict[f"predicted_{metric_name}"] = prediction[:, i]
                 output_dict[f"target_{metric_name}"] = metric_value
                 loss_all_metrics.append(loss)
 
@@ -161,3 +161,10 @@ class MochaMetricModeling(Model):
         ## ^Note: apparently MAE returns a dictionary, whereas
         ## pearson correlation returns one value
         return result
+
+# TODO
+# Logging
+# --------------------------
+# - Add individual losses
+# - Add pearson correlation 
+# - Add predicted vs human judgement
