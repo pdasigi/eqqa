@@ -4,22 +4,11 @@ from pycocoevalcap.bleu.bleu import Bleu as pccBleu
 from bert_score import score as BERT_SCORE
 from datasets import load_metric
 
+from dict_utils import update_examples
 from tokenization import normalize_answer, remove_punc
 from typing import Any, Dict, List
 
 Example = Dict[str, Any]
-
-
-def update_examples(examples: List[Example], key: str, values: List[Any]):
-    """Adds the specified values to the examples under the specified key.
-    
-    Syntactic sugar method to avoid boilerplate code. It is a
-    non-idempotent method, modifying the examples in place.
-    """
-    assert len(examples) == len(values)
-
-    for example, value in zip(examples, values):
-        example[key] = value
 
 
 def add_bleu(mocha_dataset: Dict[str, List[Example]], order: int=4):

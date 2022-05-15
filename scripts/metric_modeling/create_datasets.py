@@ -1,7 +1,7 @@
+from dict_utils import shuffle_dict
+
 import os
 import json
-
-
 
 
 def read_json_dataset(parent_dir: str, filename: str, dataset: str=None) -> dict:
@@ -59,8 +59,42 @@ def create_dataset_from_MOCHA(path, split, **kwargs):
     del datasets
 
 
+def create_all_datasets_experiment(raw_dir, exp_dir, datasets, split, prefix="mocha_mmproc_"):
+    final_dataset = {}
+    
+    for dataset in datasets:
+        filename = f"{prefix}{dataset}_{split}"
+        
+        data = read_json_dataset(raw_dir, filename)
+        final_dataset.update(data)
+    
+    final_dataset = shuffle_dict(final_dataset)
+    write_json_dataset(final_dataset, exp_dir, split)
+
+
+def create_loov_experiment(raw_dir, exp_dir, datasets, split, prefix="mocha_mmproc_"):
+    def _get_dataset(datasets):
+        final_dataset = {}
+
+        for dataset in datasets:
+            filename = f"{prefix}{dataset}_{split}"
+            data = read_json_dataset(raw_dir, filename)
+            final_dataset.update(data)
+
+        return shuffle_dict(final_dataset)
+    
+    for i, _ in enumerate(datasets):
+        loo_dataset = datasets[i]
+        final_dataset = _get_dataset(datasets[:i] + datasets[i+1:])
+        write_json_dataset(final_dataset, exp_dir, f"except_{loo_dataset}_{split}")
+    
+        data = read_json_dataset(raw_dir, f"{prefix}{loo_dataset}_{split}")
+        write_json_dataset(data, exp_dir, f"{loo_dataset}_{split}")
+
+
 
 if __name__ == "__main__":
+    # TODO - Replace w/ argparse
     ROOT_DIR = "../.."
     ORIGINAL_MOCHA_DIR = f"{ROOT_DIR}/data/metric-modeling/mocha"
 
@@ -75,4 +109,22 @@ if __name__ == "__main__":
         "w2vec_path": W2VEC_PATH,
     }
 
+    # Create raw metric modeling datasets (w/ different metrics)
+    create_dataset_from_MOCHA(ORIGINAL_MOCHA_DIR, "dev", **default_kwargs)
+    create_dataset_from_MOCHA(ORIGINAL_MOCHA_DIR, "test", **default_kwargs)
     create_dataset_from_MOCHA(ORIGINAL_MOCHA_DIR, "train", **default_kwargs)
+
+    # We are interested in two types of experiments
+    # All datasets (AD): train over all datasets and evaluate in all others
+    # Leave one out (LOOV): train in all datasets except one, evaluate in that one.
+
+    # Prepare datasets for AD experiments
+    DATASETS = ("cosmosqa", "drop", "mcscript", "narrativeqa", "quoref", "socialiqa")
+    create_all_datasets_experiment(PREPROC_DIR, f"{PREPROC_DIR}/all_datasets", DATASETS, "dev")
+    create_all_datasets_experiment(PREPROC_DIR, f"{PREPROC_DIR}/all_datasets", DATASETS, "test")
+    create_all_datasets_experiment(PREPROC_DIR, f"{PREPROC_DIR}/all_datasets", DATASETS, "train")
+
+    # Prepare datastets for leave-one-out experiment
+    create_loov_experiment(PREPROC_DIR, f"{PREPROC_DIR}/loov_datasets", DATASETS, "dev")
+    create_loov_experiment(PREPROC_DIR, f"{PREPROC_DIR}/loov_datasets", DATASETS, "test")
+    create_loov_experiment(PREPROC_DIR, f"{PREPROC_DIR}/loov_datasets", DATASETS, "train")
