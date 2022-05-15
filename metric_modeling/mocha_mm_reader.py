@@ -88,13 +88,8 @@ class MochaEqqaReader(DatasetReader):
             # }
             example_context = example["context"] if self.include_context else None
             target_metrics = self.get_metrics(example)
-            
-            if isinstance(example["candidate"], float): 
-                # FIXME why is example_id 62da259fddee833e5fab651a7c28f347 NaN
-                print(example_id)
-                continue
 
-            yield from self.text_to_instance(
+            yield self.text_to_instance(
                 target_metrics=target_metrics,
                 context=example_context,
                 question=example["question"],
