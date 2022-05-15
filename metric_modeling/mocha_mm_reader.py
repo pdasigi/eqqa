@@ -28,7 +28,6 @@ class MochaEqqaReader(DatasetReader):
         target_correctness: str,
         target_metrics: List[str],
         transformer_model_name: str = "roberta-base",
-        target_datasets: List[str] = "*",
         max_answer_length: int = 100,
         max_query_length: int = 100,
         max_document_length: int = 512,
@@ -53,7 +52,6 @@ class MochaEqqaReader(DatasetReader):
         self.target_correctness = target_correctness
         self.target_metrics = target_metrics
 
-        self.target_datasets = target_datasets
         self.include_context = include_context
         
         self.max_answer_length = max_answer_length
@@ -64,6 +62,13 @@ class MochaEqqaReader(DatasetReader):
         self._padding_token = padding_token
         
         self._log_data = defaultdict(int)
+  
+    def _log_truncated(self, truncated_artifacts):
+        truncated = []
+        for param_name, is_truncated in truncated_artifacts.items():
+            self._log_data[f"truncated_{param_name}"] += 1
+            truncated.append(is_truncated)
+        self._log_data[f"truncated_any"] += int(any(truncated))
 
     @overrides
     def _read(self, file_path: str):
@@ -74,34 +79,22 @@ class MochaEqqaReader(DatasetReader):
         with open_compressed(file_path) as dataset_file:
             data = json.load(dataset_file, )
         
-        for dataset_name, dataset in self.shard_iterable(data.items()):
-            if self.is_included(dataset_name):
-                yield from self._dataset_to_instances(dataset)
-            
-        logger.info("Stats:")
-        for key, value in self._log_data.items():
-            logger.info(f"{key}: {value}")
-
-    def _dataset_to_instances(self, dataset: Dict[str, Any]) -> Iterable[Instance]:
-        # Each example is composed of 
-        # {
-        #   "context": ...,
-        #   "question": ...,
-        #   "reference": ...,
-        #   "candidate": ...,
-        #   "metric_1": ..., 
-        #   ..., 
-        #   "metric_m": ..., 
-        # }
-        example = next(iter(dataset.values()))
-        metrics = self.get_metrics(example)
-        self._log_data["target_metrics"] = metrics
-
-        for example_id, example in dataset.items():
+        for example_id, example in self.shard_iterable(data.items()):
+            # Each example is composed of 
+            # {
+            #   "context": ...,   "question": ...,
+            #   "reference": ..., "candidate": ...,
+            #   "metric_1": ..., ..., "metric_m": ..., 
+            # }
             example_context = example["context"] if self.include_context else None
             target_metrics = self.get_metrics(example)
+            
+            if isinstance(example["candidate"], float): 
+                # FIXME why is example_id 62da259fddee833e5fab651a7c28f347 NaN
+                print(example_id)
+                continue
 
-            yield self.text_to_instance(
+            yield from self.text_to_instance(
                 target_metrics=target_metrics,
                 context=example_context,
                 question=example["question"],
@@ -109,14 +102,10 @@ class MochaEqqaReader(DatasetReader):
                 reference=example["reference"],
                 target_correctness=example.get(self.target_correctness, None),
             )
-
-    def _log_truncated(self, truncated_artifacts):
-        truncated = []
-        for param_name, is_truncated in truncated_artifacts.items():
-            self._log_data[f"truncated_{param_name}"] += 1
-            truncated.append(is_truncated)
-
-        self._log_data[f"truncated_example"] += int(any(truncated))
+            
+        logger.info("Stats:")
+        for key, value in self._log_data.items():
+            logger.info(f"{key}: {value}")
 
     @overrides
     def apply_token_indexers(self, instance: Instance) -> None:
@@ -149,7 +138,7 @@ class MochaEqqaReader(DatasetReader):
         input_text += tokenized_can
         input_text += [Token(self._paragraph_separator)] + tokenized_ref
 
-        # Determine remaining length for question 
+        # Determine remaining length for question
         # (this accounts for longer question-answer pairs)
         allowed_question_length = (
             self.max_document_length - len(input_text) - 1 # paragraph selector
@@ -176,15 +165,11 @@ class MochaEqqaReader(DatasetReader):
 
         fields["input_text"] = TextField(input_text)
 
-        metrics, values = zip(*target_metrics) # FIXME - Handle NaNs
+        metrics, values = zip(*target_metrics)
         fields["metadata"] = MetadataField({"target_metrics_names": metrics})
         fields["target_metrics"] = TensorField(torch.tensor(values, dtype=torch.float16))
-        
         fields["target_correctness"] = self.get_correctness(target_correctness)
         return Instance(fields)
-
-    def is_included(self, name):
-        return self.target_datasets == "*" or (name in self.target_datasets)
 
     def get_metrics(self, example: Dict[str, any]) -> Tuple[Tuple[str, float]]:
         metrics = (m for m in sorted(example.keys()) if m in self.target_metrics)
