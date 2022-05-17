@@ -66,7 +66,7 @@ class MochaEqqaReader(DatasetReader):
     def _log_truncated(self, truncated_artifacts):
         truncated = []
         for param_name, is_truncated in truncated_artifacts.items():
-            self._log_data[f"truncated_{param_name}"] += 1
+            self._log_data[f"truncated_{param_name}"] += int(is_truncated)
             truncated.append(is_truncated)
         self._log_data[f"truncated_any"] += int(any(truncated))
 

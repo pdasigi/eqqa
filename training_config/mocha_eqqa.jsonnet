@@ -1,16 +1,17 @@
 local transformer_model = "roberta-base";
-local epochs = 100;
+local epochs = 50;
 local batch_size = 4;
 local num_gradient_accumulation_steps = 2;
 
-local train_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/metric-modeling/preproc/train_split_test_015_1231331_w_context.json";
-local dev_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/metric-modeling/preproc/dev_split_test_015_1231331_w_context.json";
+local train_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/preprocessing/all_datasets/train.json";
+local dev_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/preprocessing/all_datasets/dev.json";
+local test_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/preprocessing/all_datasets/test.json";
 
 local training_data_size = 512;
 local num_gpus = 1;
 
 local target_metrics = ["meteor", "rougeL", "bleurt", "precision", "recall"];
-local target_correctness = "human_correctness";
+local target_correctness = "score_scaled";
 
 {
     "dataset_reader": {
@@ -18,7 +19,6 @@ local target_correctness = "human_correctness";
         "transformer_model_name": transformer_model,
         "target_correctness": target_correctness,
         "target_metrics": target_metrics,
-        "target_datasets": ["drop", "cosmosqa"],
         "max_answer_length": 100,
         "max_query_length": 100,
         "max_document_length": 512,
@@ -26,6 +26,7 @@ local target_correctness = "human_correctness";
     },
     "train_data_path": train_data_path,
     "validation_data_path": dev_data_path,
+    "test_data_path": test_data_path,
     "vocabulary": {
         "type": "empty"
     },
@@ -38,13 +39,13 @@ local target_correctness = "human_correctness";
           "input_dim": 768,
           "num_layers": 2,
           "hidden_dims": [384, 1],
-          "activations": "tanh",
+          "activations": ["tanh", "sigmoid"],
           "dropout": 0.1
 	      },
         "decoder_network": {
           "input_dim": 1,
           "num_layers": 2,
-          "hidden_dims": [16, 32],
+          "hidden_dims": [64, 128],
           "activations": "tanh",
           "dropout": 0.1
         }

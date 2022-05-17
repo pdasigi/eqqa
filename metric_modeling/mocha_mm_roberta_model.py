@@ -4,9 +4,11 @@ from allennlp.data import TextFieldTensors, Vocabulary
 from allennlp.models.model import Model
 from allennlp.modules import FeedForward
 from allennlp.nn import util
-from allennlp.training.metrics import MeanAbsoluteError, PearsonCorrelation, Average
+from allennlp.training.metrics import MeanAbsoluteError, Average
 from torch.nn import MSELoss
 from transformers import AutoModel, AutoTokenizer
+from scipy.stats import pearsonr
+
 
 import torch
 import logging
@@ -89,7 +91,11 @@ class MochaMetricModeling(Model):
         self._regression_losses = {m: MSELoss() for m in target_metrics}
 
         self._mae_metric = MeanAbsoluteError()
-        # self._pearson_metric =  PearsonCorrelation()
+        self._bottleneck_value = Average()
+        self._bottleneck_target = Average()
+        self._pearson_correlation = Average()
+
+        self._predicted_mse = {m: Average() for m in target_metrics}
 
     @property
     def embedding_dim(self):
@@ -117,8 +123,8 @@ class MochaMetricModeling(Model):
         # ^Note: 
         # https://huggingface.co/docs/transformers/v4.18.0/en/main_classes/output#transformers.modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions.pooler_output
         encoder_output = self.encoder_network(encoder_input)
-        decoder_output = self.decoder_network(encoder_output)      
-        
+        decoder_output = self.decoder_network(encoder_output)
+
         # (batch_size, n_objectives)
         prediction = self.regression_layer(decoder_output)
 
@@ -140,27 +146,45 @@ class MochaMetricModeling(Model):
                 output_dict[f"predicted_{metric_name}"] = prediction[:, i]
                 output_dict[f"target_{metric_name}"] = metric_value
                 loss_all_metrics.append(loss)
+                self._predicted_mse[metric_name](self.get_metrics_mse(prediction[:, i], metric_value))
 
             output_dict["loss"] = sum(loss_all_metrics) / len(loss_all_metrics)
             output_dict["max_reg_loss"] = max(loss_all_metrics)
         
         if target_correctness is not None:
             with torch.no_grad():
-                encoder_output = torch.sigmoid(encoder_output.detach())
-                output_dict["predicted_correctness"] = encoder_output
                 output_dict["target_correctness"] = target_correctness
                 self._mae_metric(encoder_output, target_correctness)
-    
+                self._bottleneck_value(encoder_output.sum() / encoder_output.size()[0])
+                self._bottleneck_target(target_correctness.sum() / target_correctness.size()[0])
+                
+                encoder_output = encoder_output.squeeze().cpu().detach().numpy()
+                target_correct = target_correctness.squeeze().cpu().detach().numpy()
+                print(pearsonr(encoder_output, target_correct)[0], encoder_output, target_correct)
+                self._pearson_correlation(pearsonr(encoder_output, target_correct)[0])
+
         return output_dict
 
     @overrides
     def get_metrics(self, reset: bool=False) -> Dict[str, float]:
        
         result = self._mae_metric.get_metric(reset)
-        # result["pearson"] =  self._pearson_metric.get_metric(reset) 
-        ## ^Note: apparently MAE returns a dictionary, whereas
-        ## pearson correlation returns one value
+        result["bottleneck_value"] = self._bottleneck_value.get_metric(reset)
+        result["bottleneck_target"] = self._bottleneck_target.get_metric(reset)
+        result["bottleneck_pearsonr"] = self._pearson_correlation.get_metric(reset)
+        print(self._pearson_correlation.get_metric(reset))
+
+        for metric in self.target_metrics:
+            result[f"loss_{metric}"] = self._predicted_mse[metric].get_metric(reset)
         return result
+
+    @staticmethod
+    def get_metrics_mse(prediction: torch.Tensor, target: torch.Tensor) -> float:
+        from sklearn.metrics import mean_squared_error
+        prediction = prediction.cpu().detach().numpy()
+        target = target.cpu().detach().numpy()
+        
+        return mean_squared_error(target, prediction)
 
 # TODO
 # Logging
