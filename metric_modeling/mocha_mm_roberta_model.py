@@ -7,8 +7,6 @@ from allennlp.nn import util
 from allennlp.training.metrics import MeanAbsoluteError, Average
 from torch.nn import MSELoss
 from transformers import AutoModel, AutoTokenizer
-from scipy.stats import pearsonr
-
 
 import torch
 import logging
@@ -157,26 +155,36 @@ class MochaMetricModeling(Model):
                 self._mae_metric(encoder_output, target_correctness)
                 self._bottleneck_value(encoder_output.sum() / encoder_output.size()[0])
                 self._bottleneck_target(target_correctness.sum() / target_correctness.size()[0])
-                
-                encoder_output = encoder_output.squeeze().cpu().detach().numpy()
-                target_correct = target_correctness.squeeze().cpu().detach().numpy()
-                print(pearsonr(encoder_output, target_correct)[0], encoder_output, target_correct)
-                self._pearson_correlation(pearsonr(encoder_output, target_correct)[0])
+                self._pearson_correlation(self.get_pearsonr(encoder_output, target_correctness))
 
         return output_dict
 
     @overrides
     def get_metrics(self, reset: bool=False) -> Dict[str, float]:
-       
         result = self._mae_metric.get_metric(reset)
         result["bottleneck_value"] = self._bottleneck_value.get_metric(reset)
         result["bottleneck_target"] = self._bottleneck_target.get_metric(reset)
         result["bottleneck_pearsonr"] = self._pearson_correlation.get_metric(reset)
-        print(self._pearson_correlation.get_metric(reset))
-
+        
         for metric in self.target_metrics:
             result[f"loss_{metric}"] = self._predicted_mse[metric].get_metric(reset)
         return result
+
+    @staticmethod
+    def get_pearsonr(prediction: torch.Tensor, target: torch.Tensor) -> float:
+        from scipy.stats import pearsonr
+        from math import isnan 
+        pred = prediction.flatten().cpu().detach().numpy()
+        target = target.flatten().cpu().detach().numpy()
+
+        if pred.size > 1 and target.size > 1:
+            # Avoid contaminating the metric w/ nan
+            corr = pearsonr(pred, target)[0]
+            corr = 0 if isnan(corr) else corr
+        else: 
+            corr = 0
+
+        return corr
 
     @staticmethod
     def get_metrics_mse(prediction: torch.Tensor, target: torch.Tensor) -> float:

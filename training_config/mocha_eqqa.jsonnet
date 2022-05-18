@@ -1,12 +1,10 @@
 local transformer_model = "roberta-base";
 local epochs = 50;
-local batch_size = 4;
-local num_gradient_accumulation_steps = 2;
+local batch_size = 8;
+local num_gradient_accumulation_steps = 1;
 
 local train_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/preprocessing/all_datasets/train.json";
 local dev_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/preprocessing/all_datasets/dev.json";
-local test_data_path = "/home/kat/Projects/PhD/qasper-experiments/eqqa/data/preprocessing/all_datasets/test.json";
-
 local training_data_size = 512;
 local num_gpus = 1;
 
@@ -26,7 +24,6 @@ local target_correctness = "score_scaled";
     },
     "train_data_path": train_data_path,
     "validation_data_path": dev_data_path,
-    "test_data_path": test_data_path,
     "vocabulary": {
         "type": "empty"
     },
@@ -38,14 +35,14 @@ local target_correctness = "score_scaled";
         "encoder_network": {
           "input_dim": 768,
           "num_layers": 2,
-          "hidden_dims": [384, 1],
+          "hidden_dims": [128, 1],
           "activations": ["tanh", "sigmoid"],
           "dropout": 0.1
 	      },
         "decoder_network": {
           "input_dim": 1,
           "num_layers": 2,
-          "hidden_dims": [64, 128],
+          "hidden_dims": [8, 8],
           "activations": "tanh",
           "dropout": 0.1
         }
