@@ -1,3 +1,5 @@
+lr_experiments/GoogleNews-vectors-negative300.bin.gz
+fixture_models
 data/*
 outputs/*
 *.zip
