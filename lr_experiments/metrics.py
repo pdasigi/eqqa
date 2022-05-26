@@ -26,7 +26,8 @@ def add_bleu(mocha_dataset: Dict[str, List[Example]], order: int=4):
         
         for i in range(order):
             update_examples(examples.values(), f"bleu{i+1}", bleu_scores[i])
-            
+
+
 def add_bleu_hf(mocha_dataset, order: int=4, prefix="hf_"):
     BLEU = load_metric("bleu", keep_in_memory=True)
     for dataset, examples in mocha_dataset.items():
@@ -278,6 +279,7 @@ def add_word_movers_distance(mocha_dataset, w2vec_path):
             score = model.wmdistance(candidate, reference)
             example["wmd"] = score
 
+
 def add_input_statistics(mocha_dataset):
     print("> Input statistics")
     def get_statistics(text, prefix):
@@ -298,6 +300,8 @@ def add_input_statistics(mocha_dataset):
 
 
 def compute_metrics(data, w2vec_path: str):
+    add_input_statistics(data)
+
     print(">", "BLEU")
     add_bleu(data)
     add_bleu_hf(data)
@@ -328,5 +332,4 @@ def compute_metrics(data, w2vec_path: str):
     # https://radimrehurek.com/gensim/models/word2vec.html#pretrained-models
     # >>> pip install gdown
     # >>> gdown 0B7XkCwpI5KDYNlNUTTlSS21pQmM
-    add_word_movers_distance(data, w2vec_path)
-    add_input_statistics(data)
+    # add_word_movers_distance(data, w2vec_path)

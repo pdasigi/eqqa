@@ -11,7 +11,6 @@ class NoPreprocessing:
 
 class Pipeline:
     """"""
-    
     def __init__(self, model_class, model_hparams, dataset, features, target, seed=81263):
         self.model_class = model_class
         self.model_hparams = model_hparams
@@ -39,6 +38,10 @@ class Pipeline:
         # print(f"Splitting dataset holdout_fraction={holdout_fraction}")
         from sklearn.model_selection import train_test_split
         
+        if holdout_fraction == 0 or holdout_fraction == 1:
+            self.X_train, self.X_test = self.X_train, None
+            self.y_train, self.y_test = self.y_train, None
+
         X_train, X_test, y_train, y_test = train_test_split(
             self.X_train, self.y_train,
             test_size=holdout_fraction, 
@@ -49,7 +52,7 @@ class Pipeline:
         self.X_train, self.X_test = X_train, X_test
         self.y_train, self.y_test = y_train, y_test        
         
-    def preprocess(self, with_std=True, with_pca=False, **kwargs):
+    def preprocess(self, with_std=True, with_pca=False, pca_kwargs={}, **kwargs):
         """"""
         from sklearn.preprocessing import StandardScaler
         from sklearn.pipeline import make_pipeline
@@ -62,12 +65,12 @@ class Pipeline:
             operations.append(StandardScaler())
         if with_pca:
             print("Using PCA")
-            operations.append(PCA(random_state=self.seed, **kwargs))
+            operations.append(PCA(random_state=self.seed, **pca_kwargs))
         
         self.preproc_fn = make_pipeline(*operations) \
             if len(operations) > 0 else NoPreprocessing()
         
-        self.preproc_fn.fit(self.X_train)
+        self.preproc_fn.fit(self.X_train, **kwargs)
         self.X_train = self.preproc_fn.transform(self.X_train)
         
         if getattr(self, "X_test", None) is not None:
