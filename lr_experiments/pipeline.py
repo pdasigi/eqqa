@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class NoPreprocessing:
     def fit(self, *args, **kwargs): 
         pass
@@ -120,5 +123,58 @@ class Pipeline:
 
 
 class FewShotPipeline(Pipeline):
-    pass
+    def __init__(self, fewshot_dataset, fewshot_weight, **kwargs):
+        super().__init__(**kwargs)
+        self.fewshot_dataset = fewshot_dataset
+        # pre-training to fewshot weight
+        # a value of 0.1 implies that the fewshot dataset
+        # worths 10% of the dataset and the pretraining set is worth 90%
+        assert fewshot_weight is None or 0 < fewshot_weight <= 1, "fewshot_weight should be in (0, 1)"
+        self.fewshot_weight = fewshot_weight
         
+    def load_data(self, data, fewshot_data):
+        super().load_data(data)
+        self.X_train_orig = self.X_train[self.features].copy()
+        
+        print(f"Loading **fewshot** dataset '{self.fewshot_dataset}':", fewshot_data.dataset.unique())
+        self.X_fewshot = fewshot_data[self.features]
+        self.y_fewshot = fewshot_data[self.target]
+        
+    def _compute_weights(self, n_fewshot, n_ptrain):
+        if self.fewshot_weight is None:
+            return 1, 1
+
+        n = n_ptrain + n_fewshot
+        target_fewshot = self.fewshot_weight * n
+        target_ptrain  = (1-self.fewshot_weight) * n
+        
+        fewshot_weight = target_fewshot / n_fewshot
+        ptrain_weight  = target_ptrain / n_ptrain
+        
+        return fewshot_weight, ptrain_weight
+        
+    def fewshot_fit(self):       
+        fewshot_n, ptrain_n = len(self.X_fewshot), len(self.X_train)
+        fewshot_w, ptrain_w = self._compute_weights(fewshot_n, ptrain_n)
+        
+        weights = np.ones(fewshot_n+ptrain_n)
+        weights[:ptrain_n] *= ptrain_w
+        weights[ptrain_n:] *= fewshot_w
+
+        X = np.vstack((self.X_train, self.X_fewshot))
+        y = np.concatenate((self.y_train, self.y_fewshot))
+        self.X_train = X
+        
+        # Preprocessing 
+        self.preprocess() # modifies self.X_train inplace
+
+        self.model = self.model_class(**self.model_hparams)
+        self.model.fit(self.X_train, y, sample_weight=weights)
+        self.X_train = self.X_train_orig
+        
+    def evaluate(self, eval_dataset=None):
+        results = super().evaluate(eval_dataset=eval_dataset)
+        results["fewshot_weight"] = self.fewshot_weight
+        results["fewshot_n"] = len(self.y_fewshot)
+
+        return results
