@@ -137,7 +137,7 @@ class FewShotPipeline(Pipeline):
         self.X_train_orig = self.X_train[self.features].copy()
         
         print(f"Loading **fewshot** dataset '{self.fewshot_dataset}':", fewshot_data.dataset.unique())
-        self.X_fewshot = fewshot_data[self.features]
+        self.X_fewshot = fewshot_data[self.features].copy()
         self.y_fewshot = fewshot_data[self.target]
         
     def _compute_weights(self, n_fewshot, n_ptrain):
