@@ -1,4 +1,4 @@
-lr_experiments/GoogleNews-vectors-negative300.bin.gz
+lr_experiments/results/*.pipelines
 fixture_models
 data/*
 outputs/*
