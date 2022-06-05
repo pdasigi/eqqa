@@ -178,3 +178,67 @@ class FewShotPipeline(Pipeline):
         results["fewshot_n"] = len(self.y_fewshot)
 
         return results
+
+
+class FineTuningFewShotPipeline(Pipeline):
+    def __init__(self, fewshot_dataset, fewshot_weight, **kwargs):
+        super().__init__(**kwargs)
+        self.fewshot_dataset = fewshot_dataset
+        # pre-training to fewshot weight
+        # a value of 0.1 implies that the fewshot dataset
+        # worths 10% of the dataset and the pretraining set is worth 90%
+        assert fewshot_weight is None or 0 < fewshot_weight <= 1, "fewshot_weight should be in (0, 1)"
+        self.fewshot_weight = fewshot_weight
+        
+    def load_data(self, data, fewshot_data):
+        super().load_data(data)
+        self.X_train_orig = self.X_train[self.features].copy()
+        
+        print(f"Loading **fewshot** dataset '{self.fewshot_dataset}':", fewshot_data.dataset.unique())
+        self.X_fewshot = fewshot_data[self.features].copy()
+        self.y_fewshot = fewshot_data[self.target]
+        
+    def _compute_weights(self, n_fewshot, n_ptrain):
+        if self.fewshot_weight is None:
+            return 1, 1
+
+        n = n_ptrain + n_fewshot
+        target_fewshot = self.fewshot_weight * n
+        target_ptrain  = (1-self.fewshot_weight) * n
+        
+        fewshot_weight = target_fewshot / n_fewshot
+        ptrain_weight  = target_ptrain / n_ptrain
+        
+        return fewshot_weight, ptrain_weight
+        
+    def fewshot_fit(self):       
+        fewshot_n, ptrain_n = len(self.X_fewshot), len(self.X_train)
+        fewshot_w, ptrain_w = self._compute_weights(fewshot_n, ptrain_n)
+        
+        # Fit base classifier
+        print(self.seed)
+        rand = np.random.default_rng(self.seed)
+        X_pretrain_ix = np.arange(self.X_train.shape[0])
+        X_pretrain_ix = rand.choice(X_pretrain_ix, size=ptrain_n, replace=False)
+        print(type(self.X_train))
+        self.X_train, self.y_train = self.X_train.values[X_pretrain_ix], self.y_train.values[X_pretrain_ix]
+        
+        # Preprocessing 
+        self.preprocess() # modifies self.X_train inplace
+        self.model = self.model_class(**self.model_hparams)
+        self.model.fit(self.X_train, self.y_train)
+        self.X_train = self.X_train_orig
+
+        # Fine tuning
+        X_fewshot_ix = np.arange(len(self.y_fewshot))
+        X_fewshot_ix = rand.choice(X_fewshot_ix, size=fewshot_n, replace=False)
+        X_fewshot, y_fewshot = self.X_fewshot.values[X_fewshot_ix], self.y_fewshot.values[X_fewshot_ix]
+        X_fewshot = self.preproc_fn.transform(X_fewshot)
+        self.model.fit(X_fewshot, y_fewshot)
+        
+    def evaluate(self, eval_dataset=None):
+        results = super().evaluate(eval_dataset=eval_dataset)
+        results["fewshot_weight"] = self.fewshot_weight
+        results["fewshot_n"] = len(self.y_fewshot)
+
+        return results
