@@ -104,6 +104,7 @@ class Pipeline:
             "r2": m.r2_score(y_pred=scores, y_true=y_test),
             "pearson": st.pearsonr(scores, y_test)[0],
             "spearman": st.spearmanr(scores, y_test)[0],
+            "kendalltau": st.kendalltau(scores, y_test)[0],
             "features": self.features,
             "target": self.target,
             "model_classpath": str(self.model_class.__name__),
