@@ -54,6 +54,21 @@ if __name__ == "__main__":
     }
 
     # Create raw metric modeling datasets (w/ different metrics)
-    create_dataset(ORIGINAL_MOCHA_DIR, "dev", **default_kwargs)
-    create_dataset(ORIGINAL_MOCHA_DIR, "test", **default_kwargs)
-    create_dataset(ORIGINAL_MOCHA_DIR, "train", **default_kwargs)
+    # create_dataset(ORIGINAL_MOCHA_DIR, "dev", **default_kwargs)
+    # create_dataset(ORIGINAL_MOCHA_DIR, "test", **default_kwargs)
+    # create_dataset(ORIGINAL_MOCHA_DIR, "train", **default_kwargs)
+
+    ORIGINAL_MOCHA_DIR = f"{ROOT_DIR}/data/lr_experiments"
+    PREPROC_DIR = f"{ROOT_DIR}/data/lr_experiments"
+    os.makedirs(PREPROC_DIR, exist_ok=True)
+
+    W2VEC_MODEL = 'GoogleNews-vectors-negative300'
+    W2VEC_PATH = f"{ROOT_DIR}/data/preprocessing/{W2VEC_MODEL}.bin.gz"
+
+    default_kwargs = {
+        "output_dir": PREPROC_DIR,
+        "w2vec_path": W2VEC_PATH,
+    }
+
+    # Create raw metric modeling datasets (w/ different metrics)
+    create_dataset(ORIGINAL_MOCHA_DIR, "qasper", **default_kwargs)

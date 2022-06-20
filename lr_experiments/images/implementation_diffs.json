@@ -1,1 +1,1 @@
-{"rougeL": {"n": 4009, "n_differences": 2277}, "bleu1": {"n": 4009, "n_differences": 645}, "bleu2": {"n": 4009, "n_differences": 393}, "bleu3": {"n": 4009, "n_differences": 257}, "bleu4": {"n": 4009, "n_differences": 314}}
+{"rougeL": {"n": 200, "n_differences": 89}, "bleu1": {"n": 200, "n_differences": 13}, "bleu2": {"n": 200, "n_differences": 15}, "bleu3": {"n": 200, "n_differences": 14}, "bleu4": {"n": 200, "n_differences": 18}}
